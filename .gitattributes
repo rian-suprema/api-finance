@@ -1,0 +1,12 @@
+# ==============================================================================
+# Normalização de fim de linha — proteção que o serviço gerado pelo template
+# herda. O caso crítico: *.sh PRECISA de LF. Com CRLF, o bash de Linux
+# (containers, runners de CI, LocalStack ready.d) morre em erro de sintaxe —
+# e o Git Bash do Windows TOLERA CRLF, então o defeito não aparece em teste
+# local: só quebra no clone/checkout de outra máquina.
+#
+# (O bit de EXECUÇÃO dos .sh é o irmão deste cuidado, mas .gitattributes não
+# o controla — grave-o com: git update-index --chmod=+x <script>.)
+# ==============================================================================
+* text=auto
+*.sh text eol=lf

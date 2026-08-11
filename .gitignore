@@ -1,0 +1,24 @@
+# Build
+dist/
+coverage/
+
+# Dependências
+node_modules/
+
+# Ambiente — NUNCA versionar credenciais; use .env.example como modelo
+.env
+.env.local
+.env.*.local
+
+# Runtime de testes (gerado pelo globalSetup dos e2e)
+test/.e2e-runtime.json
+
+# Logs e temporários
+*.log
+npm-debug.log*
+.DS_Store
+
+# IDE (preferências pessoais ficam fora do repo)
+.idea/
+.vscode/*
+!.vscode/extensions.json

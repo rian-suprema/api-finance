@@ -1,0 +1,175 @@
+# ==============================================================================
+# CI do archetype (variante simples) — fase que antecede o provisionamento:
+# valida, empacota e confere os artefatos de entrega SEM publicar nada.
+#
+#   quality-validation + security  → required status checks do golden path
+#   e2e-testing                    → app real contra infra efêmera (Testcontainers)
+#   build-image                    → a IMAGEM é construível, escaneada e sobe
+#                                    (sem push — o artefato morre com o runner)
+#   helm-validate                  → o CHART renderiza e passa no schema do K8s
+#                                    (sem install/push — nenhum kubeconfig no CI)
+#
+# Publicação (registry/OCI) e deploy (ArgoCD) pertencem a outra fase: os jobs
+# build-image e helm-validate são os pontos onde elas se plugam (push: true,
+# helm push) sem retrabalho.
+#
+# Nota de hardening: actions pinadas por tag de major (@vN). Se a política da
+# org exigir, endureça para SHA completo — mesmo racional do "nunca latest".
+# ==============================================================================
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality-validation:
+    name: quality-validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # npm ci: instala EXATAMENTE o package-lock.json (defesa supply chain);
+      # --ignore-scripts bloqueia pós-install de terceiros no runner.
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test:cov
+      - run: npm run build
+
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # SCA: falha o gate em HIGH/CRITICAL; moderates exigem registro no README.
+      # Este job é o SLOT para ferramentas dedicadas (socket.dev, Snyk, Sonar) —
+      # exigem credencial de org, ver README §Plataforma.
+      - run: npm audit --audit-level=high
+
+  e2e-testing:
+    name: e2e-testing
+    runs-on: ubuntu-latest # Docker disponível — requisito do Testcontainers
+    needs: [quality-validation]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:e2e
+
+  build-image:
+    name: build-image
+    runs-on: ubuntu-latest
+    needs: [quality-validation, security] # só empacota código validado
+    permissions:
+      contents: read
+      security-events: write # upload SARIF para a aba Security
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build da imagem (sem push — artefato morre com o runner)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true # disponibiliza no daemon local p/ scan e smoke
+          tags: users-api:ci
+
+      # ── Scan da imagem em 3 camadas — runbook de triagem no README §Segurança ──
+      # O scan cobre a IMAGEM inteira (SO base + camadas + app/node_modules):
+      # complementa o npm audit, que cobre só o lockfile do app.
+
+      # 1) VISIBILIDADE: o relatório completo aparece na página do run
+      #    (Job Summary) — ninguém precisa escavar log para ver o que gritou.
+      - name: Scan — relatório para o Job Summary
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: users-api:ci
+          format: table
+          output: trivy-report.txt
+          exit-code: '0' # esta camada só reporta; quem bloqueia é o gate
+      - name: Publica o relatório no Job Summary
+        if: always()
+        run: |
+          {
+            echo '## 🔍 Trivy — scan da imagem users-api:ci'
+            echo '```'
+            cat trivy-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 2) GRITO INSTITUCIONAL: cada CVE vira alerta rastreável na aba Security
+      #    (histórico, atribuição, dismissal auditável) — o canal do time de
+      #    segurança. ESTE REPOSITÓRIO É PRIVADO: a aba Security exige GitHub
+      #    Advanced Security. O canal é OPT-IN pela variável de repositório
+      #    TRIVY_SARIF_UPLOAD=true (Settings → Secrets and variables → Actions
+      #    → Variables) — ligue-a QUANDO o GHAS estiver habilitado. Sem a
+      #    variável os steps ficam "skipped" (limpo), em vez de falhar sempre
+      #    e ensinar o time a ignorar avisos. O gate abaixo bloqueia sempre,
+      #    com ou sem este canal.
+      - name: Scan — SARIF
+        if: vars.TRIVY_SARIF_UPLOAD == 'true'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: users-api:ci
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+      - name: Upload SARIF para a aba Security
+        if: vars.TRIVY_SARIF_UPLOAD == 'true'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      # 3) GATE: HIGH/CRITICAL derruba o job. Exceção SÓ via .trivyignore —
+      #    aceite de risco formal com dono, justificativa, expiração e aprovação
+      #    do time de segurança (o contrato está no cabeçalho do arquivo).
+      - name: Scan — gate HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: users-api:ci
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          trivyignores: .trivyignore
+
+      - name: Smoke — a imagem sobe contra dependências reais
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            --profile full up -d
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/health/readiness; then exit 0; fi
+            sleep 2
+          done
+          echo '--- readiness nunca respondeu; logs da api: ---'
+          docker compose --profile full logs api
+          exit 1
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile full down -v
+
+  helm-validate:
+    name: helm-validate
+    runs-on: ubuntu-latest # independente: valida o chart, não a aplicação
+    steps:
+      - uses: actions/checkout@v5
+      - name: Lint do chart
+        run: helm lint deploy/helm/users-api
+      - name: Renderiza os manifests
+        run: helm template users-api deploy/helm/users-api > rendered.yaml
+      - name: Valida manifests contra o schema do K8s
+        uses: docker://ghcr.io/yannh/kubeconform:latest
+        with:
+          args: -strict -summary rendered.yaml

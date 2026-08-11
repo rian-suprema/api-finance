@@ -1,0 +1,7 @@
+# Override usado SÓ pelo job build-image do CI: o smoke deve validar a imagem
+# que o job acabou de construir (users-api:ci), nunca reconstruir outra.
+# Uso: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile full up
+services:
+  api:
+    image: users-api:ci
+    pull_policy: never

@@ -1,0 +1,32 @@
+# Registro do serviço no catálogo do Backstage — a peça que faz o serviço
+# "existir" para a plataforma: inventário, ownership, RBAC e auditoria
+# passam a enxergá-lo. No fluxo real do scaffolder, este arquivo é gerado
+# pelo template e registrado automaticamente pelo passo `catalog:register`.
+#
+# ⚠️ PLACEHOLDER a resolver quando houver Backstage de verdade:
+#   - spec.owner: precisa ser um grupo REAL do catálogo (nunca uma pessoa).
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: users-api
+  title: Users API
+  description: >-
+    Exemplo simples do Archetype Backend NestJS (SUPREMA) — REST + Aurora
+    PostgreSQL (TypeORM), sem cache e sem mensageria.
+  annotations:
+    github.com/project-slug: rian-suprema/simplified-traditional-archetype
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - nodejs
+    - nestjs
+    - typescript
+    - archetype
+  links:
+    - url: /docs
+      title: Swagger UI (code-first)
+      icon: docs
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/platform-poc # PLACEHOLDER — validar contra grupos reais
+  system: users

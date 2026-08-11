@@ -1,0 +1,19 @@
+# ==============================================================================
+# Aceite de risco do scan de imagem (Trivy) — MECANISMO FORMAL DE EXCEÇÃO.
+#
+# O gate do CI (job build-image) só deixa de bloquear uma vulnerabilidade se
+# ela estiver listada AQUI. Nenhuma exceção é silenciosa: este arquivo é
+# versionado e toda entrada passa por PR. Cada entrada EXIGE:
+#
+#   - o CVE e o pacote afetado;
+#   - justificativa técnica (por que não é explorável/aplicável neste serviço);
+#   - dono (quem responde por ela);
+#   - data de expiração, para reavaliação obrigatória;
+#   - aprovação do time de segurança no PR que a adicionar.
+#
+# Formato (comentário-contrato + o CVE em linha própria):
+#   # [expira 2026-12-31] CVE-XXXX-YYYYY (pacote) — justificativa — dono: @fulano
+#   CVE-XXXX-YYYYY
+#
+# Arquivo vazio = nenhuma exceção vigente. Este é o estado desejável.
+# ==============================================================================

@@ -1,0 +1,72 @@
+# ==============================================================================
+# Values do archetype (variante simples) — defaults seguros; ambientes
+# sobrescrevem por arquivo (values-dev.yaml, values-prod.yaml) quando o
+# provisionamento existir.
+# ==============================================================================
+
+replicaCount: 2
+
+image:
+  # Decisão adiada de propósito: GHCR ou ECR entra AQUI na fase de publicação —
+  # trocar de registry é trocar este value, não retrabalhar o chart.
+  repository: users-api
+  # Na fase de publicação: SHA do commit (imutável). NUNCA "latest".
+  tag: ci
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# Sem requests/limits não há scheduling decente nem HPA — obrigatório.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+terminationGracePeriodSeconds: 30
+
+probes:
+  liveness:
+    path: /health/liveness
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    path: /health/readiness
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+
+# Config NÃO-sensível — vira ConfigMap (envFrom). Sensível (DB_PASSWORD etc.)
+# NUNCA entra aqui: vem de Secret referenciado em existingSecret, provisionado
+# fora do chart (External Secrets → AWS Secrets Manager, na fase de infra).
+config:
+  NODE_ENV: production
+  PORT: '3000'
+  API_PREFIX: api/v1
+  DB_PORT: '5432'
+  DB_SSL: 'true'
+  # Endpoints/hosts por ambiente (Aurora) entram nos values do ambiente na
+  # fase de provisionamento: DB_HOST / DB_USERNAME / DB_NAME
+
+# Nome de um Secret já existente no namespace com as variáveis sensíveis
+# (DB_PASSWORD, ...). Vazio = nenhum secret referenciado (ex.: helm template).
+existingSecret: ''
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]

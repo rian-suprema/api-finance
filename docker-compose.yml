@@ -1,0 +1,44 @@
+# ==============================================================================
+# Ambiente local — 100% offline, custo zero.
+#
+# Uso do dia a dia (infra no Docker, app com hot-reload no host):
+#   docker compose up -d
+#   npm run migration:run && npm run start:dev
+#
+# Tudo containerizado (inclui a API):
+#   docker compose --profile full up --build
+#
+# Espelho do serviço gerenciado:
+#   postgres → RDS Aurora PostgreSQL
+# ==============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: users-postgres
+    environment:
+      POSTGRES_USER: users
+      POSTGRES_PASSWORD: users
+      POSTGRES_DB: users
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U users -d users']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    profiles: ['full']
+    build: .
+    container_name: users-api
+    env_file: .env.docker
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

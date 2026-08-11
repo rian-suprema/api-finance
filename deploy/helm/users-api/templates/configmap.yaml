@@ -1,0 +1,12 @@
+# Config NÃO-sensível da aplicação (envFrom no Deployment).
+# Sensível vem de Secret externo (values.existingSecret) — nunca daqui.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "users-api.fullname" . }}
+  labels:
+    {{- include "users-api.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
