@@ -90,6 +90,7 @@ Estratégia de testes em **[TESTING.md](./TESTING.md)**.
 | Saúde | **`@nestjs/terminus`**: `/health/liveness` e `/health/readiness` (ver seção 6) |
 | Config | `registerAs` tipado por namespace + schema **Joi fail-fast** no boot |
 | Observabilidade mínima | Interceptors globais de logging (com duração) e timeout |
+| **Arquitetura como teste** | **ArchUnitTS** em `src/architecture.spec.ts` — as regras da seção 5 rodam como gate no `npm test` (fronteira esqueleto×exemplo, camadas, ciclos, anti-contrabando de capacidades) |
 | Entrega | Dockerfile multi-stage non-root **sem toolchain npm** · chart Helm com hardening (`deploy/helm/`) · CI com 5 jobs (seção 9) |
 
 Precisa de cache, mensageria ou integração externa resiliente? Esses padrões já estão
@@ -136,6 +137,36 @@ esqueleto: fica.
    (uniões TS refletem como `Object` e derrubam o boot).
 8. **Ao adotar cache/mensageria/integração externa**, siga os padrões da variante completa
    (`petstore-api`): invalidação explícita, consumidor idempotente, degradação de terceiro.
+
+### As regras como gate — testes de arquitetura (ArchUnitTS)
+
+Regra de arquitetura em prosa vale até o primeiro import errado — humano ou **gerado por IA**.
+Por isso as regras verificáveis por grafo de imports estão codificadas em
+[`src/architecture.spec.ts`](./src/architecture.spec.ts) com **ArchUnitTS** e rodam no
+`npm test` — dentro do `quality-validation` do CI, sem job novo:
+
+| Regra executável | O que garante |
+|---|---|
+| Esqueleto (`common/`, `config/`, `database/`, `health/`) ⊬ `[EXEMPLO]` | Apagar o módulo de exemplo **provadamente** não quebra o esqueleto |
+| Sem ciclos de dependência | Proteção que nenhum outro gate dava |
+| `entities/` só `*.entity.ts`, `dto/` só `*.dto.ts` | Organização NestJS pelo nome |
+| Controller não importa `typeorm` · service não importa controller | Camadas finas e direção única (padrão NestJS) |
+| `joi` só em `config/` | Validação de ambiente num único lugar |
+| **Anti-contrabando**: nenhum arquivo importa `@aws-sdk/*`, `cache-manager`, `@nestjs/axios`, `@ssut/nestjs-sqs`, `@keyv/*` | A ADR da variante ("capacidade só entra quando o domínio precisa") como gate — cache/mensageria/HTTP externo não entram por acidente |
+
+**Exemplo de resultado real** — violação plantada de propósito (import de cache na variante
+simples) e capturada pelo gate:
+
+```
+× sem contrabando de capacidades: cache, mensageria e HTTP externo não existem nesta variante
+  Architecture rule failed with 1 violation:
+     path: "src/modules/users/violacao-temporaria.ts"
+     rule: "variante simples não usa cache/mensageria/HTTP externo —
+            adote a variante completa se precisar"
+```
+
+A mensagem já diz o caminho certo: precisa da capacidade? É decisão consciente — remove-se a
+regra e importam-se os padrões prontos do `petstore-api`, nunca um import solto.
 
 ## 6 · Probes de saúde
 

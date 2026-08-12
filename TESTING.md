@@ -15,6 +15,11 @@ Specs colocalizadas com o código (`src/**/*.spec.ts`), services isolados com du
 (repositório mockado via DI do Nest — `Test.createTestingModule`). Rodam em segundos, sem
 Docker; são o feedback de cada save e o grosso da cobertura.
 
+Além dos specs de negócio, o nível unit inclui **`architecture.spec.ts` (ArchUnitTS)**: as
+regras de arquitetura do README §5 como testes executáveis — fronteira esqueleto×exemplo,
+ciclos, camadas NestJS, organização de pastas e o anti-contrabando de capacidades. É esqueleto,
+não exemplo: permanece quando o módulo `[EXEMPLO]` for apagado.
+
 | Spec `[EXEMPLO]` | Regras cobertas |
 |---|---|
 | `users.service.spec.ts` | Unicidade de username (409 sem persistir); criação em lote na ordem; 404 de usuário inexistente (consulta e remoção, sem efeito colateral); update aplica patch sobre a entidade carregada |
