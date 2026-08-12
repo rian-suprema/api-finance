@@ -1,0 +1,17 @@
+# ==============================================================================
+# Overrides do ambiente PROD — mesmo contrato do values-dev.yaml:
+# estrutura do archetype; valores de ambiente vêm da IaC do SRE.
+# Promoção dev→prod é responsabilidade do fluxo do SRE (ArgoCD).
+# ==============================================================================
+replicaCount: 2
+
+image:
+  repository: '' # [SRE] registry a definir (agnóstico)
+  tag: '' # [CI] SHA promovido — o MESMO artefato validado em dev
+
+config:
+  DB_HOST: '' # [TERRAFORM OUTPUT]
+  DB_USERNAME: '' # [TERRAFORM OUTPUT]
+  DB_NAME: '' # [TERRAFORM OUTPUT]
+
+existingSecret: '' # [SRE] nome do Secret no namespace (DB_PASSWORD)

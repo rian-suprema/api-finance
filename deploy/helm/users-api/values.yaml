@@ -7,7 +7,7 @@
 replicaCount: 2
 
 image:
-  # Decisão adiada de propósito: GHCR ou ECR entra AQUI na fase de publicação —
+  # Decisão adiada de propósito: o registry definido pela organização entra AQUI —
   # trocar de registry é trocar este value, não retrabalhar o chart.
   repository: users-api
   # Na fase de publicação: SHA do commit (imutável). NUNCA "latest".

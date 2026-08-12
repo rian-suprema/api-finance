@@ -222,16 +222,98 @@ padronizado. Endpoints de autenticação (`/user/login`, `/user/logout`) não ex
 | Artefato | Papel |
 |---|---|
 | `catalog-info.yaml` | Registro no catálogo do Backstage (Component, ownership, tags). Dois `PLACEHOLDER`s: `spec.owner` e `github.com/project-slug`. |
-| `.github/workflows/ci.yml` | Cinco jobs, todos **sem publicar nada**: **`quality-validation`** (lint → format → unit+cobertura → build) e **`security`** (`npm audit --audit-level=high`) — required status checks; **`e2e-testing`** (Testcontainers); **`build-image`** (build `push: false` → scan Trivy em 3 camadas → smoke compose + readiness); **`helm-validate`** (helm lint → template → kubeconform, zero cluster). |
-| `deploy/helm/users-api/` | Chart: Deployment com probes, `securityContext` endurecido (non-root, rootfs read-only, drop ALL), `resources`, ConfigMap + `existingSecret`. `image.repository`/`tag` parametrizados (GHCR×ECR é decisão da fase de publicação). |
+| `.github/workflows/ci.yml` | Cinco jobs, todos **sem publicar nada** (publicação e deploy são de outra fase). `quality-validation` e `security` são os required status checks do golden path, para humanos e agentes de IA. **Detalhe técnico de cada job na subseção abaixo.** |
+| `deploy/helm/users-api/` | Chart: Deployment com probes, `securityContext` endurecido (non-root, rootfs read-only, drop ALL), `resources`, ConfigMap + `existingSecret`. `image.repository`/`tag` parametrizados (o registry de imagens é decisão em aberto — quando definido, é um value, não retrabalho). |
 | `docker-compose.ci.yml` | Override do smoke: usa a imagem `users-api:ci` recém-construída. |
+| `deploy/infra/requirements.yaml` | **Declaração de infraestrutura** — o que o serviço exige (nesta variante: só Postgres), com os outputs esperados. Nós declaramos; o SRE aprova em PR e realiza via Terraform. Paridade 1:1 com o compose local. |
+| `deploy/helm/*/values-{dev,prod}.yaml` | O **ponto de junção** entre a IaC e o chart: estrutura nossa, valores preenchidos com os outputs do Terraform (`[TERRAFORM OUTPUT]`/`[SRE]`/`[CI]` marcados campo a campo). |
+| `deploy/argocd/application.example.yaml` | Referência para o SRE: o chart é consumível **direto do git** pelo ArgoCD — o Application real vive no território deles. |
 
-> **Evolução do job `security`:** ferramentas dedicadas (socket.dev — análise de
-> comportamento de pacote; Snyk; SonarQube) plugam neste job; exigem credencial de org.
-> O canal SARIF→aba Security é opt-in via variável `TRIVY_SARIF_UPLOAD=true` (exige GHAS
-> em repositório privado).
+### O CI em detalhe — o que cada job executa e o que cada auditoria cobre
 
-Fora do escopo desta fase: publicação da imagem/chart, Terraform e ArgoCD.
+**`quality-validation`** — qualidade do código-fonte:
+
+| Step | O que faz | O que audita/garante |
+|---|---|---|
+| `npm ci --ignore-scripts` | Instala **exatamente** o `package-lock.json`; divergência lockfile×package.json = falha | Integridade da árvore de dependências + **bloqueio dos scripts de pós-install** de terceiros no runner (vetor clássico de supply chain) |
+| `npm run lint` | ESLint 9 flat config, regras **type-aware** | Consistência + classes de erro que exigem o type-checker (`no-unsafe-*`, `unbound-method`…) |
+| `npm run format:check` | Prettier em modo verificação | Formato único — diff de PR sem ruído |
+| `npm run test:cov` | Testes unitários **+ `architecture.spec.ts` (ArchUnitTS)** com cobertura | Regras de negócio **e regras de arquitetura** (fronteira esqueleto×exemplo, camadas, ciclos, anti-contrabando — seção 5) como gate |
+| `npm run build` | Compilação Nest/tsc de produção | O artefato TypeScript compila de verdade — não só passa no editor |
+
+**`security`** — auditoria de dependências (SCA):
+
+| Step | O que faz | Cobertura |
+|---|---|---|
+| `npm audit --audit-level=high` | **Software Composition Analysis** de TODAS as dependências declaradas (produção e dev) contra a base de advisories do npm | HIGH/CRITICAL = gate vermelho; *moderates* só são aceitas com registro no README. Não cobre o que está fora do lockfile — para isso existe o scan de imagem abaixo |
+
+> Este job é o **slot** para ferramentas dedicadas: **socket.dev** (análise de
+> **comportamento** de pacote — scripts de instalação, acesso à rede, troca suspeita de
+> mantenedor — pega ataques *antes* de virarem advisory), **Snyk** e **SonarQube**. Todas
+> exigem credencial de org — por isso não vêm pré-conectadas.
+
+**`e2e-testing`** — a aplicação real contra infraestrutura real:
+
+| Step | O que faz | O que garante |
+|---|---|---|
+| `npm run test:e2e` | Sobe um Postgres **real e efêmero** (Testcontainers), aplica as **migrations reais**, boota o AppModule completo | Boot de verdade (o Joi fail-fast e o wiring de DI são exercitados), probes respondendo, contrato de erro, CRUD ponta a ponta |
+
+**`build-image`** — empacotamento e as auditorias do artefato:
+
+| Step | O que faz | O que audita/garante |
+|---|---|---|
+| Build (`push: false`) | Docker multi-stage; o estágio final roda **non-root** (`USER node`), tem o **toolchain removido** (npm/corepack/yarn saem após o `npm ci --omit=dev --ignore-scripts`), base **pinada** (`node:22-alpine`) | **Segurança do empacotamento**: a imagem carrega só o runtime (`node dist/main`) — superfície mínima; nada é publicado, o artefato morre com o runner |
+| Trivy — camada 1 (Job Summary) | Scan completo da imagem: **vulnerabilidades do SO** (pacotes Alpine), **pacotes Node dentro da imagem** (o que o `npm audit` não vê — ex.: software embutido na base) e **varredura de segredos** nas camadas | Visibilidade: o relatório inteiro aparece na página do run, antes de qualquer log |
+| Trivy — camada 2 (SARIF) | Opt-in via variável `TRIVY_SARIF_UPLOAD=true` (exige GHAS em repo privado) | Cada CVE vira **alerta rastreável na aba Security** — o canal do time de segurança |
+| Trivy — camada 3 (gate) | `--severity HIGH,CRITICAL --exit-code 1` | Derruba o job; exceção **só** via `.trivyignore` (CVE + justificativa + dono + expiração + aval do time de segurança) — runbook na seção 11 |
+| Smoke | `docker compose` com override usa **a imagem recém-construída** contra o Postgres real e espera `GET /health/readiness` | O artefato **sobe de verdade** com a dependência real — não só builda |
+| Teardown (`if: always()`) | `compose down -v` | Runner limpo mesmo em falha |
+
+**`helm-validate`** — o chart sem tocar em cluster:
+
+| Step | O que faz | O que garante |
+|---|---|---|
+| `helm lint` | Higiene do chart | Estrutura e values coerentes |
+| `helm template` | Renderiza os manifests de verdade | Template quebrado não chega ao deploy |
+| `kubeconform -strict` | Valida os manifests renderizados contra o **schema do Kubernetes** | Manifest inválido pego sem cluster, sem kubeconfig — o CI nunca segura credencial de cluster |
+
+### CI × CD — o fluxo e as fronteiras de responsabilidade
+
+```mermaid
+flowchart LR
+    subgraph DEV["🧩 Serviço / Archetype — NOSSA responsabilidade"]
+        direction TB
+        SRC["repo git<br/>código · chart ·<br/>requirements.yaml"]
+        CI5["CI — 5 jobs<br/>valida código, arquitetura,<br/>imagem e chart"]
+        ART["artefatos validados<br/>imagem · chart ·<br/>declaração de infra"]
+        SRC --> CI5 --> ART
+    end
+
+    subgraph SREB["🛡️ SRE — responsabilidade DELES"]
+        direction TB
+        PR["aprovação em PR<br/>requirements · values"]
+        TF["pipeline de IaC<br/>Terraform provisiona<br/>Aurora · namespace"]
+        OUTS["outputs → values-&lt;env&gt;.yaml<br/>segredos → Secret (ESO)"]
+        ARGO["ArgoCD<br/>sync · promoção dev→prod"]
+        PR --> TF --> OUTS --> ARGO
+    end
+
+    ART ==>|"handoff VIA GIT<br/>(PR neste repo)"| PR
+    REG[("registry de imagens<br/>a definir — agnóstico")]
+    ART -.->|"push<br/>(fase de publicação)"| REG
+    ARGO -.->|pull| REG
+    ARGO ==>|deploy| K8S[("Kubernetes<br/>namespace da IaC")]
+```
+
+| Fronteira | Responsável | O quê |
+|---|---|---|
+| 🧩 Nossa | serviço/archetype | Código, chart, `requirements.yaml` (declaração), CI com todos os gates, artefatos validados |
+| 🤝 Conjunta | as duas pontas | `values-<env>.yaml` — **estrutura** nossa; **valores** são outputs do Terraform do SRE |
+| 🛡️ SRE | plataforma | Aprovação dos PRs de infra, pipeline Terraform, ArgoCD (Applications, sync, promoção), políticas de segurança, registry |
+
+Fora do escopo desta fase: **publicação** da imagem e do chart (armazenamento agnóstico —
+registry a definir com o SRE) — os jobs `build-image` e `helm-validate` são os pontos de plug
+quando o destino for definido, sem retrabalho.
 
 ## 10 · Setup padronizado de desenvolvimento
 

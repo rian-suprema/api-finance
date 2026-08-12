@@ -1,0 +1,22 @@
+# ==============================================================================
+# Overrides do ambiente DEV — o PONTO DE JUNÇÃO entre a pipeline de IaC (SRE)
+# e o chart. A ESTRUTURA é do archetype; os VALORES de ambiente vêm de fora:
+#   [TERRAFORM OUTPUT] → preenchido com outputs do provisionamento (SRE)
+#   [SRE]              → decisão/padrão do time de SRE
+#   [CI]               → preenchido pela fase de publicação do CI
+# Segredos NUNCA entram aqui: chegam via Secret externo (existingSecret).
+# ==============================================================================
+replicaCount: 1
+
+image:
+  repository: '' # [SRE] registry a definir (agnóstico) — ex.: <registry>/users-api
+  tag: '' # [CI] SHA do commit na publicação — nunca "latest"
+
+config:
+  DB_HOST: '' # [TERRAFORM OUTPUT] endpoint do Aurora (writer)
+  DB_USERNAME: '' # [TERRAFORM OUTPUT]
+  DB_NAME: '' # [TERRAFORM OUTPUT]
+
+# Secret provisionado FORA do chart (padrão do SRE — ex.: External Secrets →
+# Secrets Manager). Deve conter: DB_PASSWORD.
+existingSecret: '' # [SRE] nome do Secret no namespace

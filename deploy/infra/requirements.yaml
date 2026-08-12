@@ -1,0 +1,30 @@
+# ==============================================================================
+# DECLARAÇÃO DE INFRAESTRUTURA — o que este serviço EXIGE para operar.
+#
+# Contrato serviço → SRE:
+#   • NÓS declaramos (o archetype entrega este arquivo pré-preenchido);
+#   • o SRE revisa/aprova em PR e REALIZA via pipeline de IaC (Terraform).
+# Nada aqui provisiona coisa alguma — é declaração, não execução.
+# O vocabulário de `type` aceito é do SRE (o catálogo de infra que eles suportam).
+#
+# Paridade local provada: o docker-compose.yml espelha 1:1 esta lista — a
+# variante simples declara UM componente, e é só isso que ela usa (o gate
+# anti-contrabando do architecture.spec.ts garante que continue assim).
+# Ponto de junção com o deploy: os `outputs.env` entram em values-<env>.yaml;
+# os `outputs.secret` chegam via Secret externo (padrão do SRE — ex.: ESO).
+# ==============================================================================
+service: users-api
+runtime:
+  platform: kubernetes
+  chart: deploy/helm/users-api
+  port: 3000
+  probes:
+    liveness: /health/liveness
+    readiness: /health/readiness
+
+requires:
+  - type: postgres # → RDS Aurora PostgreSQL
+    purpose: persistência do domínio (TypeORM; migrations em SQL explícito)
+    outputs:
+      env: [DB_HOST, DB_PORT, DB_USERNAME, DB_NAME]
+      secret: [DB_PASSWORD]

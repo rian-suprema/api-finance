@@ -1,0 +1,30 @@
+# ==============================================================================
+# EXEMPLO DE REFERÊNCIA — NÃO é aplicado por nós e NÃO vive aqui em produção.
+# O Application real é criado e operado pelo SRE, no território deles (Terraform
+# ou repo de config do ArgoCD). Este arquivo existe só para dar partida à
+# conversa: mostra como o chart deste repositório é consumível DIRETO do git —
+# nenhum registry de chart é obrigatório.
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: users-api-dev
+  namespace: argocd # [SRE] namespace do ArgoCD
+spec:
+  project: default # [SRE] projeto ArgoCD com RBAC adequado
+  source:
+    repoURL: https://github.com/rian-suprema/simplified-traditional-archetype.git
+    targetRevision: main # [SRE] ou tag/SHA, conforme política de promoção
+    path: deploy/helm/users-api
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml # o ponto de junção com os outputs do Terraform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: users-api-dev # [SRE] namespace provisionado pela IaC
+  syncPolicy:
+    # [SRE] automatizar ou não o sync é política de vocês:
+    # automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false # namespace vem da IaC, não do ArgoCD

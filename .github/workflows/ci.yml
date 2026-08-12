@@ -9,9 +9,9 @@
 #   helm-validate                  → o CHART renderiza e passa no schema do K8s
 #                                    (sem install/push — nenhum kubeconfig no CI)
 #
-# Publicação (registry/OCI) e deploy (ArgoCD) pertencem a outra fase: os jobs
-# build-image e helm-validate são os pontos onde elas se plugam (push: true,
-# helm push) sem retrabalho.
+# Publicação (registry a definir — armazenamento agnóstico) e deploy (ArgoCD/SRE)
+# pertencem a outra fase: build-image e helm-validate são os pontos de plug
+# quando o destino for definido, sem retrabalho.
 #
 # Nota de hardening: actions pinadas por tag de major (@vN). Se a política da
 # org exigir, endureça para SHA completo — mesmo racional do "nunca latest".
