@@ -29,6 +29,20 @@ services:
       timeout: 3s
       retries: 10
 
+  # Observabilidade local OPT-IN (não pesa o `up` padrão):
+  #   docker compose --profile observability up -d
+  #   e defina OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 no .env.
+  # Um único container com a stack completa: recebe OTLP e mostra traces
+  # (Tempo), métricas (Prometheus) e logs (Loki) num Grafana local.
+  otel-lgtm:
+    profiles: ['observability']
+    image: grafana/otel-lgtm:0.30.1
+    container_name: users-otel-lgtm
+    ports:
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP (o que o SDK usa)
+      - '3300:3000' # Grafana UI (3000 já é da API)
+
   api:
     profiles: ['full']
     build: .

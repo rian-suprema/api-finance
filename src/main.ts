@@ -1,12 +1,21 @@
+// PRIMEIRO import de todos: a auto-instrumentação do OTel precisa aplicar os
+// patches antes de http/express/pg serem carregados por qualquer módulo.
+import './telemetry/otel';
+
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // bufferLogs: nada é perdido entre o create e o useLogger abaixo
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // Todo Logger do Nest passa a emitir JSON estruturado (pino) — com
+  // trace_id/span_id injetados automaticamente quando o OTel está ligado.
+  app.useLogger(app.get(PinoLogger));
   const config = app.get(ConfigService);
 
   // Prefixo da API de negócio (API_PREFIX; default do archetype: api/v1).

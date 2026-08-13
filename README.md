@@ -89,7 +89,7 @@ Estratégia de testes em **[TESTING.md](./TESTING.md)**.
 | Erros | Exception filter global no contrato `{ code, message }` |
 | Saúde | **`@nestjs/terminus`**: `/health/liveness` e `/health/readiness` (ver seção 6) |
 | Config | `registerAs` tipado por namespace + schema **Joi fail-fast** no boot |
-| Observabilidade mínima | Interceptors globais de logging (com duração) e timeout |
+| Observabilidade | **OpenTelemetry** (traces + métricas OTLP, interruptor fail-safe por env — seção 6) · logs **JSON estruturados** (pino) com trace_id · interceptors de logging/timeout |
 | **Arquitetura como teste** | **ArchUnitTS** em `src/architecture.spec.ts` — as regras da seção 5 rodam como gate no `npm test` (fronteira esqueleto×exemplo, camadas, ciclos, anti-contrabando de capacidades) |
 | Entrega | Dockerfile multi-stage non-root **sem toolchain npm** · chart Helm com hardening (`deploy/helm/`) · CI com 5 jobs (seção 9) |
 
@@ -177,6 +177,36 @@ regra e importam-se os padrões prontos do `petstore-api`, nunca um import solto
 
 As probes ficam **fora do prefixo da API**: contrato com o orquestrador não é endpoint de
 negócio versionado. O chart em `deploy/helm/` já as referencia.
+
+### Telemetria (OpenTelemetry) — o interruptor e as responsabilidades
+
+O esqueleto emite **traces + métricas via OTLP** (`src/telemetry/otel.ts`) e **logs JSON
+estruturados** (pino) com `trace_id` injetado. O comportamento é governado por **um
+interruptor de ambiente** — a mesma imagem nos três estados:
+
+| Estado | Como | Quem vê o quê |
+|---|---|---|
+| **Desligado** *(padrão)* | Sem `OTEL_EXPORTER_OTLP_ENDPOINT` — o SDK **nem inicia** | Dev local, unit e CI rodam sem custo nenhum |
+| **Ligado local** *(opt-in do dev)* | `docker compose --profile observability up -d` + endpoint no `.env` | **Grafana em `localhost:3300`**: requests e queries do TypeORM como spans, logs correlacionados por trace |
+| **Ligado no cluster** | `OTEL_*` nos `values-<env>.yaml`, preenchidos pelo **SRE** | O Collector do cluster recebe OTLP; backend, dashboards, retenção, alertas e sampling são **do SRE** |
+
+Nesta variante a auto-instrumentação cobre HTTP de entrada (sem `/health/*` — probe não é
+sinal) e **TypeORM/pg**. Ao adotar capacidades da variante completa, os spans delas vêm junto.
+
+> **O que é um span:** a unidade do trace — **uma operação com início, fim, duração e
+> atributos**, encadeada em árvore pai→filho. O trace é a árvore inteira; olhar para ela
+> responde "onde foi o tempo?" e "onde quebrou?" sem caçar log. Nesta variante:
+>
+> ```
+> trace: POST /user                 (span raiz)
+> ├── span: SELECT users WHERE username  (TypeORM/pg — a checagem de unicidade)
+> └── span: INSERT INTO users            (TypeORM/pg)
+> ```
+
+**Fail-open provado por teste:** o e2e roda com a telemetria **ligada contra um Collector
+propositalmente morto** (`test/otel-failopen.setup.ts`) — suíte verde = observabilidade nunca
+derruba a aplicação. O estado desligado é provado pelo smoke do CI (a imagem sobe sem env OTEL).
+Mesma fronteira do CD: **o app só fala OTLP; tudo após o Collector é do SRE.**
 
 ## 7 · Os módulos de exemplo — users
 
@@ -269,6 +299,13 @@ padronizado. Endpoints de autenticação (`/user/login`, `/user/logout`) não ex
 | Smoke | `docker compose` com override usa **a imagem recém-construída** contra o Postgres real e espera `GET /health/readiness` | O artefato **sobe de verdade** com a dependência real — não só builda |
 | Teardown (`if: always()`) | `compose down -v` | Runner limpo mesmo em falha |
 
+> **O que é o smoke ("teste de fumaça"):** o "isso liga?" do artefato. Ele **não** valida regra
+> de negócio (isso é papel do unit e do e2e) — prova que a **imagem empacotada** boota e
+> responde o mínimo (readiness `ok`) contra o Postgres real. É raso de propósito e pega a
+> classe de defeito que nenhum teste de código vê: o que só existe **dentro da imagem de
+> produção** (ex.: dependência de dev ausente derrubando o boot — defeito real já capturado
+> por este gate na família do archetype).
+
 **`helm-validate`** — o chart sem tocar em cluster:
 
 | Step | O que faz | O que garante |
@@ -314,6 +351,36 @@ flowchart LR
 Fora do escopo desta fase: **publicação** da imagem e do chart (armazenamento agnóstico —
 registry a definir com o SRE) — os jobs `build-image` e `helm-validate` são os pontos de plug
 quando o destino for definido, sem retrabalho.
+
+### Camada 3 — o que um setup produtivo ainda vai pedir e não existe no chart hoje
+
+O chart cobre o dia a dia por values (réplicas, Service, resources, probes, segurança do pod)
+e deixa namespace para a IaC. A **terceira camada** são os recursos que um Kubernetes
+produtivo tipicamente exige e que ficaram como **gap deliberado** desta fase — cada um com o
+dono certo:
+
+| Recurso ausente | Para que serve em produção | Quem define a exigência | Quem implementa |
+|---|---|---|---|
+| **HPA** | Escalar réplicas por carga | 🛡️ SRE (política de capacidade) | 🧩 chart (`hpa.enabled` + values) |
+| **PodDisruptionBudget** | Sobreviver a manutenção de nodes sem indisponibilidade | 🛡️ SRE | 🧩 chart (`pdb.enabled`) |
+| **NetworkPolicy** | Restringir quem fala com quem na rede do cluster | 🛡️ SRE (segurança) | 🧩 chart, conforme o padrão deles |
+| **Ingress** | Exposição HTTP externa (TLS, rotas) | 🛡️ SRE (ingress controller, certificados) | 🧩 chart (`ingress.enabled`) |
+| **ServiceAccount dedicado** | **IRSA** — o pod assume IAM Role para falar com serviços AWS sem access keys (nesta variante não há consumo AWS direto hoje; a necessidade nasce junto com a primeira capacidade que falar com a AWS) | 🛡️ SRE (cria a Role via Terraform) | 🧩 chart (SA + annotation da Role) |
+| **affinity / tolerations / topologySpread** | Distribuição e colocação de pods conforme a topologia do cluster | 🛡️ SRE (só eles conhecem os node groups) | 🧩 chart (pass-through de values) |
+| **Estratégia de rollout** | Controle fino do RollingUpdate (surge/unavailable) | 🛡️ SRE | 🧩 chart |
+
+**A regra de evolução, em ordem de preferência:**
+
+1. **Evoluir o chart do archetype** *(o caminho certo)*: cada exigência do SRE vira template +
+   toggle em values (`hpa.enabled`, `pdb.enabled`…), adicionada **uma vez** e herdada por todo
+   serviço gerado. O SRE pede/propõe via PR — o chart é nosso, a revisão é conjunta, e o
+   `helm-validate` do CI valida qualquer mudança automaticamente (kubeconform continua de guarda).
+2. **Lado ArgoCD** *(sem tocar no repo)*: o SRE pode sobrepor com Kustomize post-rendering ou
+   parâmetros Helm no Application — útil para emergência/experimento, **ruim como regime**: a
+   verdade do deploy sai do git do serviço.
+
+> Em uma frase: **o SRE é o dono do "o que produção exige"; o chart é o lugar onde isso vira
+> padrão reutilizável** — exceção operacional é do ArgoCD, nunca o caminho permanente.
 
 ## 10 · Setup padronizado de desenvolvimento
 

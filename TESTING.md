@@ -42,6 +42,11 @@ Fluxos cobertos:
 
 Requisitos: Docker em execução. O container sobe/cai dentro do teste (`--runInBand`).
 
+
+**Telemetria no e2e:** a suíte roda com o OpenTelemetry LIGADO contra um Collector
+propositalmente morto (`test/otel-failopen.setup.ts`, via jest setupFiles) — verde =
+fail-open provado: observabilidade nunca derruba a aplicação.
+
 ## O que cada nível NÃO cobre (e por quê)
 
 - Unit não pega erro de SQL, mapeamento TypeORM ou wiring de módulo → por isso o e2e roda

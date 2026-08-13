@@ -1,6 +1,7 @@
 import { ClassSerializerInterceptor, Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
 
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -20,6 +21,19 @@ import { UsersModule } from './modules/users/users.module';
       load: [appConfig, databaseConfig],
       validationSchema: envValidationSchema,
       validationOptions: { abortEarly: false },
+    }),
+    // Logs estruturados (pino): JSON no stdout — no K8s, o agente do cluster
+    // coleta stdout; nunca arquivo/agente in-process.
+    // autoLogging desligado: o access-log já é papel do LoggingInterceptor.
+    // Pretty-print é OPT-IN por LOG_PRETTY (nunca por NODE_ENV): pino-pretty é
+    // devDependency e NÃO existe na imagem de produção — atrelar ao NODE_ENV
+    // derruba o boot do container (defeito real pego pelo smoke do CI).
+    LoggerModule.forRoot({
+      pinoHttp: {
+        autoLogging: false,
+        level: process.env.LOG_LEVEL ?? 'info',
+        transport: process.env.LOG_PRETTY === 'true' ? { target: 'pino-pretty' } : undefined,
+      },
     }),
     // Infraestrutura transversal
     DatabaseModule,

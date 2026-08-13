@@ -16,6 +16,13 @@ config:
   DB_HOST: '' # [TERRAFORM OUTPUT] endpoint do Aurora (writer)
   DB_USERNAME: '' # [TERRAFORM OUTPUT]
   DB_NAME: '' # [TERRAFORM OUTPUT]
+  # Observabilidade (OpenTelemetry) — o app só fala OTLP; Collector, sampling,
+  # dashboards, retenção e alertas são do SRE. Vazio = telemetria DESLIGADA
+  # (interruptor fail-safe do esqueleto).
+  OTEL_EXPORTER_OTLP_ENDPOINT: '' # [SRE] ex.: http://otel-collector.observability:4318
+  OTEL_SERVICE_NAME: users-api
+  OTEL_TRACES_SAMPLER: parentbased_traceidratio # [SRE] política de sampling
+  OTEL_TRACES_SAMPLER_ARG: '0.1' # [SRE] fração amostrada
 
 # Secret provisionado FORA do chart (padrão do SRE — ex.: External Secrets →
 # Secrets Manager). Deve conter: DB_PASSWORD.
