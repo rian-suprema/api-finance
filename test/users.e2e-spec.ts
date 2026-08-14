@@ -83,7 +83,8 @@ describe('Users API (e2e)', () => {
 
   describe('Health — probes fora do prefixo da API', () => {
     it('liveness responde 200 sem tocar dependências', async () => {
-      await api().get('/health/liveness').expect(200);
+      const res = await api().get('/health/liveness');
+      expect(res.status).toBe(200);
     });
 
     it('readiness confirma o Postgres saudável', async () => {

@@ -37,6 +37,8 @@ jobs:
       # --ignore-scripts bloqueia pós-install de terceiros no runner.
       - run: npm ci --ignore-scripts
       - run: npm run lint
+      # Densidade de duplicação (jscpd): gate em 3% — ver README §Quality gate
+      - run: npm run dup:check
       - run: npm run format:check
       - run: npm run test:cov
       - run: npm run build

@@ -13,7 +13,7 @@ import { AppModule } from './app.module';
 async function bootstrap(): Promise<void> {
   // bufferLogs: nada é perdido entre o create e o useLogger abaixo
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  // Todo Logger do Nest passa a emitir JSON estruturado (pino) — com
+  // Cada Logger do Nest passa a emitir JSON estruturado (pino) — com
   // trace_id/span_id injetados automaticamente quando o OTel está ligado.
   app.useLogger(app.get(PinoLogger));
   const config = app.get(ConfigService);

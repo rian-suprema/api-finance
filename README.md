@@ -138,6 +138,41 @@ esqueleto: fica.
 8. **Ao adotar cache/mensageria/integração externa**, siga os padrões da variante completa
    (`petstore-api`): invalidação explícita, consumidor idempotente, degradação de terceiro.
 
+### Quality gate de código — smells, complexidade, bloaters e duplicação
+
+O `quality-validation` também bloqueia o build por **métricas de qualidade** — sem servidor
+nenhum: as regras rodam no ESLint que já existe (+ um detector de duplicação), com os limiares
+**calibrados contra esta base** (nascem verdes; mudar limiar é decisão registrada em PR):
+
+| O que pega | Mecanismo | Limiar |
+|---|---|---|
+| **Code smells** (funções idênticas, branches duplicados, ifs colapsáveis…) | `eslint-plugin-sonarjs` — as regras da própria SonarSource, sem servidor Sonar | ruleset recommended |
+| **Complexidade cognitiva** (dificuldade de LER o fluxo) | `sonarjs/cognitive-complexity` | 15 |
+| **Complexidade ciclomática** (caminhos independentes) | ESLint core `complexity` | 15 |
+| **Bloaters** (função/arquivo grandes demais) | `max-lines-per-function` / `max-lines` / `max-depth` | 80 / 400 / 4 |
+| **Lista longa de parâmetros** | `max-params` (limiar acomoda o padrão de DI do Nest; acima disso é sinal legítimo de SRP violado) | 5 |
+| **Densidade de duplicação** | **`jscpd`** — step próprio no CI | **3%** (hoje: 0,53%) |
+
+**Onde ocorrem e como visualizar:**
+
+| Momento | Como o dev vê |
+|---|---|
+| Digitando | Sublinhado na linha exata, com a mensagem da regra (extensão ESLint do VS Code + SonarQube for IDE — ambas no `extensions.json`) |
+| No commit | `pre-commit` (husky/lint-staged) barra os arquivos staged |
+| Sob demanda | `npm run lint` (relatório no terminal, arquivo:linha:regra) · `npm run dup:check` (tabela de clones) · **`npm run dup:report`** (relatório **HTML navegável** em `report/jscpd`, gitignorado) |
+| No CI | Mesmos comandos no job `quality-validation` — regra quebrada = PR bloqueado |
+
+Um único mecanismo, três pontos de contato — o que o IDE sublinha é o que o CI bloqueia.
+Exceções calibradas: testes ficam fora dos *bloaters* (`describe()` é longo por natureza) e
+podem repetir literais (fixtures legíveis); o rigor de type-safety continua valendo neles.
+
+> **Sonar e afins:** a publicação destas métricas em ferramentas como **SonarQube é possível**
+> (mesma família de regras), mas os archetypes **ainda não estão plugados** a Sonar via CI
+> (`.github/workflows`) — exige servidor/token de organização. Hoje o gate é local + CI, e
+> um limite conhecido dessa escolha: sem servidor não existe o escopo "código novo" (baseline);
+> o `jscpd` mede o repositório inteiro — para um archetype, que nasce limpo, isso é até mais
+> estrito.
+
 ### As regras como gate — testes de arquitetura (ArchUnitTS)
 
 Regra de arquitetura em prosa vale até o primeiro import errado — humano ou **gerado por IA**.
@@ -245,6 +280,10 @@ padronizado. Endpoints de autenticação (`/user/login`, `/user/logout`) não ex
 4. **Limpe os pontos acoplados ao exemplo**: `POSTGRES_*`/nomes de container no
    `docker-compose.yml`, `DB_NAME` nos `.env*`, título do Swagger no `main.ts`, values do
    chart (`deploy/helm/users-api/values.yaml`) e `catalog-info.yaml`.
+   *O ajuste de `catalog-info.yaml`/`package.json` só existe no fluxo manual (copiar o exemplo
+   à mão): quando o serviço nascer via **Backstage Template**, estes campos já vêm preenchidos
+   pelo formulário de criação — o template gera o `catalog-info.yaml` do serviço novo e o
+   `catalog:register` o registra.*
 5. Rode `npm run lint && npm test` — os gates são os mesmos do CI.
 
 ## 9 · Plataforma — catálogo e CI
@@ -266,7 +305,8 @@ padronizado. Endpoints de autenticação (`/user/login`, `/user/logout`) não ex
 | Step | O que faz | O que audita/garante |
 |---|---|---|
 | `npm ci --ignore-scripts` | Instala **exatamente** o `package-lock.json`; divergência lockfile×package.json = falha | Integridade da árvore de dependências + **bloqueio dos scripts de pós-install** de terceiros no runner (vetor clássico de supply chain) |
-| `npm run lint` | ESLint 9 flat config, regras **type-aware** | Consistência + classes de erro que exigem o type-checker (`no-unsafe-*`, `unbound-method`…) |
+| `npm run lint` | ESLint 9 flat config, regras **type-aware** + **quality gate** (sonarjs, complexidade, bloaters, max-params) | Consistência, type-safety e as métricas de qualidade da seção 5 — smells e complexidade bloqueiam o build |
+| `npm run dup:check` | **jscpd** — detector de código duplicado | Densidade de duplicação acima de **3%** = gate vermelho |
 | `npm run format:check` | Prettier em modo verificação | Formato único — diff de PR sem ruído |
 | `npm run test:cov` | Testes unitários **+ `architecture.spec.ts` (ArchUnitTS)** com cobertura | Regras de negócio **e regras de arquitetura** (fronteira esqueleto×exemplo, camadas, ciclos, anti-contrabando — seção 5) como gate |
 | `npm run build` | Compilação Nest/tsc de produção | O artefato TypeScript compila de verdade — não só passa no editor |
@@ -348,9 +388,22 @@ flowchart LR
 | 🤝 Conjunta | as duas pontas | `values-<env>.yaml` — **estrutura** nossa; **valores** são outputs do Terraform do SRE |
 | 🛡️ SRE | plataforma | Aprovação dos PRs de infra, pipeline Terraform, ArgoCD (Applications, sync, promoção), políticas de segurança, registry |
 
+#### Handoff — os insumos que o SRE fornece (e a chave que cada um liga)
+
+O desenho acima está **acordado com o SRE**. O que falta para ligar cada chave são insumos
+operacionais deles — este é o checklist do handoff:
+
+| # | Insumo do SRE | A chave que ele liga |
+|---|---|---|
+| 1 | **Registry de imagens** + método de autenticação do CI | `push: true` no job `build-image` + `image.repository` nos values |
+| 2 | Como o **Application/namespace** nasce no processo deles (Terraform/repo de config) | O `application.example.yaml` vira o Application real, no território deles |
+| 3 | Formato dos **outputs do Terraform → values** + nome do Secret (ESO) | Campos `[TERRAFORM OUTPUT]` dos `values-<env>.yaml` + `existingSecret` |
+| 4 | **Endpoint do Collector** + política de sampling | Campos `OTEL_*` dos values — liga a Fase 2 da observabilidade |
+| 5 | **Políticas de admissão** do cluster (PSA/Kyverno/OPA) | Validação do chart contra as policies reais antes do primeiro sync |
+
 Fora do escopo desta fase: **publicação** da imagem e do chart (armazenamento agnóstico —
-registry a definir com o SRE) — os jobs `build-image` e `helm-validate` são os pontos de plug
-quando o destino for definido, sem retrabalho.
+o registry acordado entra como insumo 1) — os jobs `build-image` e `helm-validate` são os
+pontos de plug, sem retrabalho.
 
 ### Camada 3 — o que um setup produtivo ainda vai pedir e não existe no chart hoje
 
