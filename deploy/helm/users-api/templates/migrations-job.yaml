@@ -1,0 +1,60 @@
+{{- if .Values.migrations.enabled }}
+# Migrations como passo PRÉ-SYNC (Helm hook / ArgoCD PreSync): roda ANTES do
+# Deployment subir, com o role de MIGRAÇÃO/OWNER (Secret separado do runtime).
+# É aqui que a separação de papéis vira operação: o schema/RLS é criado pelo
+# owner; a app nunca tem privilégio de DDL.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "users-api.fullname" . }}-migrate
+  labels:
+    {{- include "users-api.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # ArgoCD: o mesmo Job serve de PreSync hook
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "users-api.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: '{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}'
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ['npm', 'run', 'migration:run']
+          envFrom:
+            - configMapRef:
+                name: {{ include "users-api.fullname" . }}
+            {{- if .Values.migrations.existingSecret }}
+            # Credenciais de MIGRAÇÃO/OWNER (DB_MIGRATION_USERNAME/PASSWORD +
+            # DB_APP_ROLE) — Secret distinto do runtime da app.
+            - secretRef:
+                name: {{ .Values.migrations.existingSecret }}
+            {{- end }}
+          {{- if .Values.jwtPublicKey.existingSecret }}
+          volumeMounts:
+            - name: sayplus-jwt-public-key
+              mountPath: /etc/sayplus/jwt
+              readOnly: true
+          {{- end }}
+      {{- if .Values.jwtPublicKey.existingSecret }}
+      volumes:
+        - name: sayplus-jwt-public-key
+          secret:
+            secretName: {{ .Values.jwtPublicKey.existingSecret }}
+            items:
+              - key: {{ .Values.jwtPublicKey.secretKey }}
+                path: public.pem
+      {{- end }}
+{{- end }}

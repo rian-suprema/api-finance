@@ -59,6 +59,22 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.jwtPublicKey.existingSecret }}
+            # Chave pública da SayPlus (JWT RS256) — vira o arquivo apontado por
+            # JWT_PUBLIC_KEY_PATH. Sem o Secret, o app sobe fail-closed:
+            # probes ok, rotas protegidas 401 (nunca abertas, nunca outage).
+            - name: sayplus-jwt-public-key
+              mountPath: /etc/sayplus/jwt
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if .Values.jwtPublicKey.existingSecret }}
+        - name: sayplus-jwt-public-key
+          secret:
+            secretName: {{ .Values.jwtPublicKey.existingSecret }}
+            items:
+              - key: {{ .Values.jwtPublicKey.secretKey }}
+                path: public.pem
+        {{- end }}

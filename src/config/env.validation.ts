@@ -22,6 +22,15 @@ export const envValidationSchema = Joi.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: Joi.string().uri().optional(),
   OTEL_SERVICE_NAME: Joi.string().optional(),
 
+  // Auth SayPlus (JWT RS256, validação passiva — só a chave PÚBLICA).
+  // JWT_PUBLIC_KEY_PATH é opcional de propósito: ausente, o app sobe e as
+  // rotas protegidas respondem 401 (fail-closed) — decisão registrada.
+  // allow(''): values do Helm renderizam string vazia — vazio = ausente,
+  // nunca boot derrubado (defeito real pego na demo do Step 1).
+  JWT_PUBLIC_KEY_PATH: Joi.string().allow('').optional(),
+  JWT_ISSUER: Joi.string().default('sayplus'),
+  JWT_AUDIENCE: Joi.string().default('petshop'),
+
   // RDS Aurora PostgreSQL
   DB_HOST: Joi.string().required(),
   DB_PORT: Joi.number().port().default(5432),
@@ -29,4 +38,12 @@ export const envValidationSchema = Joi.object({
   DB_PASSWORD: Joi.string().required(),
   DB_NAME: Joi.string().required(),
   DB_SSL: Joi.boolean().default(false),
+
+  // Separação de papéis da RLS (Step 5). Opcionais: ausentes, migrations e app
+  // usam o mesmo DB_USERNAME (fluxo simples de dev, sem RLS efetiva).
+  //   • DB_MIGRATION_USERNAME/PASSWORD → role OWNER que roda migrations;
+  //   • DB_APP_ROLE → nome do role de RUNTIME, p/ a migration conceder os grants.
+  DB_MIGRATION_USERNAME: Joi.string().optional(),
+  DB_MIGRATION_PASSWORD: Joi.string().optional(),
+  DB_APP_ROLE: Joi.string().optional(),
 });

@@ -24,7 +24,38 @@ runtime:
 
 requires:
   - type: postgres # → RDS Aurora PostgreSQL
-    purpose: persistência do domínio (TypeORM; migrations em SQL explícito)
+    purpose: >-
+      Persistência do domínio (TypeORM; migrations em SQL explícito) COM
+      Row-Level Security + FORCE (Step 5): separação de papéis obrigatória.
+      • ROLE de RUNTIME (a app): NÃO-owner, só DML — DB_USERNAME/DB_PASSWORD.
+      • ROLE de MIGRAÇÃO/OWNER (Job PreSync): dono do schema, roda DDL+RLS —
+        DB_MIGRATION_USERNAME/DB_MIGRATION_PASSWORD + DB_APP_ROLE (nome do
+        runtime, p/ os grants). O owner é NÃO-super (senão o FORCE não o
+        alcança). Os dois roles são criados pelo IaC/Terraform.
     outputs:
-      env: [DB_HOST, DB_PORT, DB_USERNAME, DB_NAME]
-      secret: [DB_PASSWORD]
+      env: [DB_HOST, DB_PORT, DB_USERNAME, DB_NAME, DB_APP_ROLE]
+      # DOIS Secrets distintos: runtime (app) e migração/owner (Job PreSync)
+      secret: [DB_PASSWORD, DB_MIGRATION_USERNAME, DB_MIGRATION_PASSWORD]
+
+  # --- Consumo da auth SayPlus (Steps 1–3 da integração) ---------------------
+  - type: k8s-secret
+    purpose: >-
+      Chave PÚBLICA (PEM) da SayPlus para validação passiva de JWT RS256.
+      Entregue como Secret no namespace e montada pelo chart em
+      /etc/sayplus/jwt/public.pem (values: jwtPublicKey.existingSecret).
+      Trade-off registrado: por ser chave PÚBLICA (sem requisito de
+      confidencialidade) e de rotação rara, provisionamento DIRETO do Secret
+      (GitOps) é suficiente; plugar no trilho ASM(+KMS)+ESO é opcional — só
+      se paga se for o trilho único que a operação já usa para os demais
+      Secrets. Sem o Secret o app sobe fail-closed: probes ok, rotas 401.
+    outputs:
+      secret: [public.pem]
+
+  - type: cni-network-policy
+    purpose: >-
+      PRÉ-REQUISITO de cluster: o CNI precisa IMPOR NetworkPolicy (EKS: VPC
+      CNI com network policy habilitado, Calico ou Cilium) — sem imposição, a
+      policy do chart fica silenciosamente inerte. O chart nasce com
+      default-deny de ingress habilitado nos values de ambiente; o SRE DEVE
+      preencher networkPolicy.ingress.gatewayNamespace antes do 1º deploy
+      (vazio = deny-all total, nem o gateway alcança o pod).

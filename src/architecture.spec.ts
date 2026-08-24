@@ -11,6 +11,51 @@ import { projectFiles } from 'archunit';
  *  (Sem isso, este próprio arquivo violaria as regras que declara.) */
 const isSpecFile = (path: string): boolean => path.endsWith('.spec.ts');
 
+/**
+ * Pilares de segurança em tempo de BUILD: conta handlers HTTP cujo bloco de
+ * decorators não declara @Permissions(...) nem @Public() — aceitando também a
+ * declaração no NÍVEL DA CLASSE (bloco do @Controller), como faz o
+ * HealthController. Heurística de conteúdo: agrupa decorators consecutivos
+ * (args multilinha via balanço de parênteses) — o bloco fecha na assinatura
+ * do método/classe. Validada plantando violação real (teste do testador);
+ * a autoridade em runtime é o PermissionsGuard (deny-by-default) — esta
+ * regra só antecipa o erro.
+ */
+const ROUTE_DECORATOR = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(/;
+const SECURITY_DECORATOR = /@(Permissions|Public)\s*\(/;
+const parenBalance = (line: string): number =>
+  (line.match(/\(/g)?.length ?? 0) - (line.match(/\)/g)?.length ?? 0);
+
+const routesWithoutSecurityDeclaration = (content: string): number => {
+  let missing = 0;
+  let classCovered = false;
+  let block: string[] = [];
+  let openParens = 0;
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.trim();
+    if (openParens > 0 || line.startsWith('@')) {
+      // dentro do bloco de decorators (ou continuação de args multilinha)
+      block.push(line);
+      openParens = Math.max(0, openParens + parenBalance(line));
+      continue;
+    }
+    if (line === '') continue;
+    // linha de código comum (assinatura do método/classe) fecha o bloco
+    const decorators = block.join('\n');
+    if (/@Controller\s*\(/.test(decorators)) {
+      classCovered = SECURITY_DECORATOR.test(decorators);
+    } else if (
+      ROUTE_DECORATOR.test(decorators) &&
+      !SECURITY_DECORATOR.test(decorators) &&
+      !classCovered
+    ) {
+      missing += 1;
+    }
+    block = [];
+  }
+  return missing;
+};
+
 describe('Arquitetura do archetype (variante simples)', () => {
   // Fronteira exemplo×esqueleto: apagar o módulo [EXEMPLO] nunca pode
   // quebrar o esqueleto — logo o esqueleto não pode depender dele.
@@ -81,6 +126,21 @@ describe('Arquitetura do archetype (variante simples)', () => {
           file.directory.includes('config') ||
           !/from 'joi'/.test(file.content),
         'validação de ambiente vive em src/config',
+      )
+      .check();
+    expect(violations).toStrictEqual([]);
+  });
+
+  // Deny-by-default do PermissionsGuard antecipado para o BUILD: rota nova
+  // sem declaração de segurança não passa no `npm test` local nem no CI —
+  // o dev descobre em segundos, não em produção via 403.
+  it('pilares de segurança: toda rota declara @Permissions(...) ou @Public()', async () => {
+    const violations = await projectFiles()
+      .withName('*.controller.ts')
+      .should()
+      .adhereTo(
+        (file) => isSpecFile(file.path) || routesWithoutSecurityDeclaration(file.content) === 0,
+        'handler HTTP sem @Permissions/@Public — rota nasceria negada (deny-by-default)',
       )
       .check();
     expect(violations).toStrictEqual([]);

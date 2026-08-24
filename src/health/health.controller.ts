@@ -6,6 +6,8 @@ import {
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
 
+import { Public } from '../auth/public.decorator';
+
 /**
  * Probes de saúde — contrato do archetype com o orquestrador (K8s):
  *
@@ -17,7 +19,11 @@ import {
  *
  * As rotas ficam FORA do prefixo da API (ver main.ts): probe é contrato de
  * infraestrutura, não endpoint de negócio versionado.
+ *
+ * @Public: o kubelet não envia JWT — probe autenticado derrubaria o pod.
+ * É o ÚNICO uso legítimo previsto do decorator neste archetype.
  */
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(

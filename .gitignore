@@ -23,3 +23,7 @@ npm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 report/
+docker-compose.override.yml
+
+# Chaves RS256 de DEV (npm run auth:keys) — a privada NUNCA pode vazar
+keys/

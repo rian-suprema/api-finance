@@ -9,7 +9,6 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,
@@ -22,9 +21,10 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "paths": {
-      "@app/*": ["src/*"]
-    }
+    "resolveJsonModule": true
+    // Sem baseUrl/paths de propósito: o TS 6 depreciou baseUrl (erro no TS 7)
+    // e o alias @app/* do scaffold do Nest nunca foi usado — imports internos
+    // são relativos. Se um alias for desejado um dia, entre COMPLETO: paths
+    // relativo ao tsconfig ("./src/*") + moduleNameMapper no jest.
   }
 }

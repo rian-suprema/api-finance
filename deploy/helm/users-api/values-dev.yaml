@@ -27,3 +27,19 @@ config:
 # Secret provisionado FORA do chart (padrão do SRE — ex.: External Secrets →
 # Secrets Manager). Deve conter: DB_PASSWORD.
 existingSecret: '' # [SRE] nome do Secret no namespace
+
+# Consumo da auth SayPlus (Step 3 da integração)
+jwtPublicKey:
+  # [SRE] Secret do namespace com a chave pública (PEM) da SayPlus — ver
+  # deploy/infra/requirements.yaml (provisionamento direto/GitOps é suficiente;
+  # trilho ASM+ESO é opcional). Vazio = app fail-closed (rotas protegidas 401).
+  existingSecret: ''
+
+# Postura zero-trust do archetype: a policy NASCE habilitada no ambiente.
+# ⚠️ Preencher gatewayNamespace ANTES do 1º deploy — vazio = deny-all total
+# (nem o gateway alcança o pod). Pré-requisito: CNI que imponha NetworkPolicy.
+networkPolicy:
+  enabled: true
+  ingress:
+    gatewayNamespace: '' # [SRE] namespace do ingress-controller/gateway
+    gatewayPodLabels: {} # [SRE] labels dos pods do gateway (opcional)

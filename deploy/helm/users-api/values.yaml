@@ -48,6 +48,13 @@ config:
   NODE_ENV: production
   PORT: '3000'
   API_PREFIX: api/v1
+  # Auth SayPlus (JWT RS256 — validação passiva; o módulo nunca emite).
+  # Issuer/audience são INVARIANTES entre ambientes (contrato da plataforma).
+  # A chave pública será montada via Secret+volume neste caminho (Step 3 da
+  # integração); sem ela o app sobe fail-closed: probes ok, rotas 401.
+  JWT_ISSUER: sayplus
+  JWT_AUDIENCE: petshop
+  JWT_PUBLIC_KEY_PATH: /etc/sayplus/jwt/public.pem
   DB_PORT: '5432'
   DB_SSL: 'true'
   # Endpoints/hosts por ambiente (Aurora) entram nos values do ambiente na
@@ -56,6 +63,46 @@ config:
 # Nome de um Secret já existente no namespace com as variáveis sensíveis
 # (DB_PASSWORD, ...). Vazio = nenhum secret referenciado (ex.: helm template).
 existingSecret: ''
+
+# Chave pública da SayPlus (JWT RS256) — montada como o arquivo apontado por
+# config.JWT_PUBLIC_KEY_PATH. O Secret vive FORA do chart (ver
+# deploy/infra/requirements.yaml). Trade-off registrado: provisionamento
+# direto/GitOps do Secret é SUFICIENTE (chave pública — sem requisito de
+# confidencialidade — e rotação rara); plugar no trilho ASM+ESO é opcional,
+# válido só se for o trilho único que o SRE já opera. Vazio = sem montagem —
+# o app sobe fail-closed (probes ok, rotas protegidas 401).
+# Migrations como Job PreSync, com o role de MIGRAÇÃO/OWNER (Step 5 — RLS).
+# A app (Deployment) conecta como runtime não-owner (existingSecret), sem DDL.
+migrations:
+  enabled: true
+  backoffLimit: 2
+  # [SRE] Secret com DB_MIGRATION_USERNAME/PASSWORD (owner) e DB_APP_ROLE.
+  # Distinto de existingSecret (runtime). Vazio = Job usa só o ConfigMap.
+  existingSecret: ''
+
+jwtPublicKey:
+  existingSecret: ''
+  # Nome do item (data key) dentro do Secret que contém o PEM
+  secretKey: public.pem
+
+# Tráfego Leste/Oeste: default-deny de ingress + allow explícito só para o
+# caminho do gateway. Postura do archetype: NASCE HABILITADA nos ambientes
+# (values-{dev,prod}) — nenhum outro pod abre conexão com este por padrão.
+# PRÉ-REQUISITO (ver requirements.yaml): o CNI do cluster precisa IMPOR
+# NetworkPolicy (EKS: VPC CNI c/ network policy habilitado, Calico ou Cilium)
+# — sem isso a política fica silenciosamente inerte.
+# Egress default-deny é evolução futura (exige liberar DNS/Aurora/Redis/AWS
+# endpoint a endpoint — decisão a tomar com a operação madura).
+networkPolicy:
+  enabled: false
+  ingress:
+    # [SRE] namespace do ingress-controller/gateway. OBRIGATÓRIO antes do
+    # 1º deploy com a policy habilitada: vazio = deny-all TOTAL (nem o
+    # gateway alcança o pod).
+    gatewayNamespace: ''
+    # [SRE] labels (matchLabels) dos pods do gateway; vazio = qualquer pod
+    # DO NAMESPACE do gateway
+    gatewayPodLabels: {}
 
 podSecurityContext:
   runAsNonRoot: true

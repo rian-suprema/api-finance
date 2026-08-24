@@ -9,3 +9,4 @@ coverage
 .husky
 .vscode
 test
+keys/

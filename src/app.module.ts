@@ -3,12 +3,14 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 
+import { AuthModule } from './auth/auth.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
-import { appConfig, databaseConfig } from './config/configuration';
+import { appConfig, authConfig, databaseConfig } from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
+import { TenantTransactionInterceptor } from './database/tenant-transaction.interceptor';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -18,7 +20,7 @@ import { UsersModule } from './modules/users/users.module';
       isGlobal: true,
       cache: true,
       envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
-      load: [appConfig, databaseConfig],
+      load: [appConfig, authConfig, databaseConfig],
       validationSchema: envValidationSchema,
       validationOptions: { abortEarly: false },
     }),
@@ -36,6 +38,9 @@ import { UsersModule } from './modules/users/users.module';
       },
     }),
     // Infraestrutura transversal
+    // AuthModule registra os guards GLOBAIS (JWT → permissões, deny-by-default):
+    // consumo da auth da plataforma SayPlus — o módulo valida, nunca emite.
+    AuthModule,
     DatabaseModule,
     HealthModule,
     // Módulos de negócio
@@ -59,6 +64,9 @@ import { UsersModule } from './modules/users/users.module';
     { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },
     // Aplica @Exclude/@Expose das entidades na serialização das respostas
     { provide: APP_INTERCEPTOR, useClass: ClassSerializerInterceptor },
+    // MAIS INTERNO (último): envolve o handler na transação com o GUC de tenant
+    // da RLS (Step 5). Requisições @Public (sem tenant no claim) passam direto.
+    { provide: APP_INTERCEPTOR, useClass: TenantTransactionInterceptor },
   ],
 })
 export class AppModule {}

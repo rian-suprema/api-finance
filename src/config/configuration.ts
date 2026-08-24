@@ -13,6 +13,15 @@ export const appConfig = registerAs('app', () => ({
   httpRequestTimeoutMs: parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS ?? '30000', 10),
 }));
 
+// Consumo da auth SayPlus (validação passiva do JWT — ver src/auth/)
+export const authConfig = registerAs('auth', () => ({
+  // Caminho da CHAVE PÚBLICA (PEM) da SayPlus. Opcional no boot: ausente ou
+  // vazio → app sobe, probes ok, rotas protegidas 401 (fail-closed + alarme)
+  publicKeyPath: process.env.JWT_PUBLIC_KEY_PATH || undefined,
+  issuer: process.env.JWT_ISSUER ?? 'sayplus',
+  audience: process.env.JWT_AUDIENCE ?? 'petshop',
+}));
+
 export const databaseConfig = registerAs('database', () => ({
   host: process.env.DB_HOST,
   port: parseInt(process.env.DB_PORT ?? '5432', 10),
