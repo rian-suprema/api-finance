@@ -17,7 +17,7 @@ image:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 3000
+  targetPort: 3005
 
 # Sem requests/limits não há scheduling decente nem HPA — obrigatório.
 resources:
@@ -46,7 +46,7 @@ probes:
 # fora do chart (External Secrets → AWS Secrets Manager, na fase de infra).
 config:
   NODE_ENV: production
-  PORT: '3000'
+  PORT: '3005'
   API_PREFIX: api/v1
   # Auth SayPlus (JWT RS256 — validação passiva; o módulo nunca emite).
   # Issuer/audience são INVARIANTES entre ambientes (contrato da plataforma).

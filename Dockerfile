@@ -27,5 +27,5 @@ RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force \
 COPY --from=build /app/dist ./dist
 # Processo sem root (prática padrão de hardening de imagem)
 USER node
-EXPOSE 3000
+EXPOSE 3005
 CMD ["node", "dist/main"]

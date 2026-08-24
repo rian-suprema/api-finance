@@ -43,7 +43,32 @@ services:
     ports:
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP (o que o SDK usa)
-      - '3300:3000' # Grafana UI (3000 já é da API)
+      - '3300:3000' # Grafana UI (host 3300; a API usa 3005)
+
+  # Ferramenta de ADMINISTRAÇÃO OPT-IN (não pesa o `up` padrão e NÃO espelha
+  # produção — é conveniência do dev; por isso fica fora do requirements.yaml):
+  #   docker compose --profile tools up -d
+  # Conecta no Postgres pela REDE INTERNA do compose (host `postgres`), então
+  # independe do docker-compose.override.yml que remapeia a porta PUBLICADA
+  # nesta máquina.
+  pgadmin:
+    profiles: ['tools']
+    image: dpage/pgadmin4:8
+    container_name: users-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      # Modo dev: sem tela de login/master-password — abre direto
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - '5050:80' # http://localhost:5050
+    volumes:
+      # Pré-cadastra o servidor "users (local)" — o dev só digita a senha (users)
+      - ./scripts/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   api:
     profiles: ['full']
@@ -51,7 +76,7 @@ services:
     container_name: users-api
     env_file: .env.docker
     ports:
-      - '3000:3000'
+      - '3005:3005'
     depends_on:
       postgres:
         condition: service_healthy

@@ -17,7 +17,7 @@ service: users-api
 runtime:
   platform: kubernetes
   chart: deploy/helm/users-api
-  port: 3000
+  port: 3005
   probes:
     liveness: /health/liveness
     readiness: /health/readiness

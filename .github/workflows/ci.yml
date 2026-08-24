@@ -151,7 +151,7 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml \
             --profile full up -d
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:3000/health/readiness; then exit 0; fi
+            if curl -fsS http://localhost:3005/health/readiness; then exit 0; fi
             sleep 2
           done
           echo '--- readiness nunca respondeu; logs da api: ---'

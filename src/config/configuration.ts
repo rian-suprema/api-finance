@@ -7,7 +7,7 @@ import { registerAs } from '@nestjs/config';
  */
 export const appConfig = registerAs('app', () => ({
   env: process.env.NODE_ENV ?? 'development',
-  port: parseInt(process.env.PORT ?? '3000', 10),
+  port: parseInt(process.env.PORT ?? '3005', 10),
   // Prefixo da API de negócio. Default do archetype: api/v1.
   apiPrefix: process.env.API_PREFIX ?? 'api/v1',
   httpRequestTimeoutMs: parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS ?? '30000', 10),

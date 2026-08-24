@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "users (local)",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "users",
+      "Username": "users",
+      "SSLMode": "prefer",
+      "Comment": "Pre-cadastrado pelo docker-compose (profile tools). Host `postgres` = rede interna do compose. Senha (dev): users."
+    }
+  }
+}
