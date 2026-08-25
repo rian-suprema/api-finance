@@ -233,10 +233,21 @@ Isso pega defeitos que só existem _dentro da imagem de produção_ — o cláss
 ### 8.1 App containerizada (compose faz o build)
 
 ```bash
+npm run auth:keys                                  # gera keys/ ANTES (ver nota abaixo)
 docker compose --profile full up --build          # Postgres + API, tudo em container
 curl -fsS http://localhost:3005/health/readiness   # "status":"ok"
 docker compose --profile full down
 ```
+
+> **🔑 Autenticação no modo containerizado.** A chave pública de dev **não vai na imagem**
+> (`keys/` está no `.dockerignore`) — ela é **montada em runtime** por um volume
+> `./keys:/etc/sayplus/jwt:ro`, espelhando o padrão de produção (Secret+volume). Por isso rode
+> **`npm run auth:keys` no host antes** de subir o profile `full`; então o container valida
+> tokens normalmente (`Bearer $(npm run auth:token --silent)`). **Sem** as `keys/`, o container
+> sobe **fail-closed**: o `readiness` (que é `@Public`) responde 200, mas toda rota protegida
+> retorna **401** — não é bug, é o comportamento de segurança (o log traz o alarme
+> `🚨 JWT_PUBLIC_KEY_PATH não configurada`). Para exercitar auth sem container, use
+> `npm run start:dev` (seção 1), que lê `keys/` direto do diretório.
 
 ### 8.2 Construir e rodar a imagem exatamente como o CI (smoke local)
 
