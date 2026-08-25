@@ -77,6 +77,12 @@ services:
     env_file: .env.docker
     ports:
       - '3005:3005'
+    volumes:
+      # Chave PÚBLICA de DEV montada em runtime — nunca na imagem (keys/ está no
+      # .dockerignore). Espelha o padrão de produção (Secret+volume). Requer
+      # `npm run auth:keys` no host antes de `--profile full up`; sem ela, a app
+      # sobe fail-closed (rotas protegidas → 401, readiness segue 200).
+      - ./keys:/etc/sayplus/jwt:ro
     depends_on:
       postgres:
         condition: service_healthy
