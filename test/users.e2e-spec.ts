@@ -34,6 +34,12 @@ interface UserBody {
   email: string;
   password?: string;
 }
+interface PaginatedBody {
+  data: UserBody[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
 
 describe('Users API (e2e)', () => {
   let app: INestApplication;
@@ -209,6 +215,62 @@ describe('Users API (e2e)', () => {
       expect(res.body as ErrorBody).toEqual({ code: 'NOT_FOUND', message: 'User not found' });
     });
   });
+  describe('Listagem paginada (GET /user) — paginação no banco, por tenant', () => {
+    let bearerList: string;
+
+    beforeAll(async () => {
+      bearerList = `Bearer ${auth.sign({
+        tenantId: 'tenant-list',
+        permissions: Object.values(PETSHOP_USERS),
+      })}`;
+      for (const username of ['lista1', 'lista2', 'lista3']) {
+        await api().post(`${prefix}/user`).set('Authorization', bearerList).send({ username });
+      }
+    });
+
+    it('devolve o envelope {data,total,page,pageSize} só com os usuários do tenant', async () => {
+      const res = await api().get(`${prefix}/user`).set('Authorization', bearerList).expect(200);
+      const body = res.body as PaginatedBody;
+      expect(body.total).toBe(3);
+      expect(body.page).toBe(1);
+      expect(body.pageSize).toBe(20);
+      expect(body.data.map((u) => u.username)).toEqual(['lista1', 'lista2', 'lista3']);
+      // password nunca sai — nem na lista
+      expect(body.data.every((u) => u.password === undefined)).toBe(true);
+    });
+
+    it('pagina NO BANCO: pageSize=2 → 2 itens na pág 1 (total=3); pág 2 → 1 item', async () => {
+      const p1 = await api()
+        .get(`${prefix}/user?page=1&pageSize=2`)
+        .set('Authorization', bearerList)
+        .expect(200);
+      const b1 = p1.body as PaginatedBody;
+      expect(b1.data).toHaveLength(2);
+      expect(b1.total).toBe(3);
+
+      const p2 = await api()
+        .get(`${prefix}/user?page=2&pageSize=2`)
+        .set('Authorization', bearerList)
+        .expect(200);
+      expect((p2.body as PaginatedBody).data).toHaveLength(1);
+    });
+
+    it('pageSize acima do teto (>100) → 400 (ValidationPipe)', async () => {
+      const res = await api().get(`${prefix}/user?pageSize=101`).set('Authorization', bearerList);
+      expect(res.status).toBe(400);
+    });
+
+    it('outro tenant não enxerga estes usuários na lista', async () => {
+      const bearerOther = `Bearer ${auth.sign({
+        tenantId: 'tenant-outro',
+        permissions: Object.values(PETSHOP_USERS),
+      })}`;
+      const res = await api().get(`${prefix}/user`).set('Authorization', bearerOther).expect(200);
+      const nomes = (res.body as PaginatedBody).data.map((u) => u.username);
+      expect(nomes).not.toContain('lista1');
+    });
+  });
+
   describe('Isolamento multi-tenant (Step 2) — tenant vem do claim, nunca do cliente', () => {
     let bearerB: string;
 

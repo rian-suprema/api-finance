@@ -4,6 +4,8 @@ import { DataSource, Repository } from 'typeorm';
 
 import { tenantManager } from '../../database/tenant-context';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { PaginatedUsersDto } from './dto/paginated-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 
@@ -40,6 +42,24 @@ export class UsersService {
       created.push(await this.create(tenantId, dto));
     }
     return created;
+  }
+
+  /**
+   * Lista paginada do tenant. `findAndCount` faz a paginação NO BANCO — vira
+   * `SELECT ... LIMIT take OFFSET skip` + um `COUNT(*)`; nunca carrega tudo em
+   * memória. `order` estável (id) torna a paginação determinística.
+   */
+  async findAll(
+    tenantId: string,
+    { page, pageSize }: ListUsersQueryDto,
+  ): Promise<PaginatedUsersDto> {
+    const [data, total] = await this.users.findAndCount({
+      where: { tenantId },
+      order: { id: 'ASC' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+    return { data, total, page, pageSize };
   }
 
   async findByUsername(tenantId: string, username: string): Promise<User> {

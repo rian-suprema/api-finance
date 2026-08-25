@@ -22,6 +22,7 @@ describe('UsersService', () => {
     create: jest.fn((input: Partial<User>) => input),
     save: jest.fn((input: Partial<User>) => Promise.resolve({ id: 1, ...input })),
     findOne: jest.fn(),
+    findAndCount: jest.fn(),
     remove: jest.fn(),
   };
 
@@ -77,6 +78,23 @@ describe('UsersService', () => {
       expect(usersRepo.save).toHaveBeenLastCalledWith(
         expect.objectContaining({ tenantId: TENANT }),
       );
+    });
+  });
+
+  describe('findAll — paginação NO BANCO, por tenant', () => {
+    it('usa findAndCount com filtro de tenant + skip/take, e devolve o envelope', async () => {
+      usersRepo.findAndCount.mockResolvedValue([[{ id: 1, username: 'a' }], 1]);
+
+      const res = await service.findAll(TENANT, { page: 2, pageSize: 10 });
+
+      // paginação delegada ao banco (LIMIT/OFFSET), dentro da fatia do tenant
+      expect(usersRepo.findAndCount).toHaveBeenCalledWith({
+        where: { tenantId: TENANT },
+        order: { id: 'ASC' },
+        skip: 10, // (page 2 - 1) * pageSize 10
+        take: 10,
+      });
+      expect(res).toEqual({ data: [{ id: 1, username: 'a' }], total: 1, page: 2, pageSize: 10 });
     });
   });
 
