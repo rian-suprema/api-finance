@@ -1,0 +1,24 @@
+# Dependabot — vigilância PROATIVA de dependências (roda na INFRA do GitHub,
+# não no CI deste repo nem localmente). Abre PRs de atualização; o CI deste
+# repositório (os 5 jobs) valida cada PR como qualquer outro.
+#
+# Security updates (bump quando sai um advisory) já vêm ligados por padrão nas
+# Settings do repo. Este arquivo habilita os VERSION updates semanais e agrupa
+# minor/patch num único PR para reduzir ruído.
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 10
+    commit-message:
+      # Conventional Commits — mantém o histórico no padrão do projeto
+      prefix: 'chore'
+      include: 'scope'
+    groups:
+      # Um PR só para todos os minor/patch; majors ficam em PRs individuais
+      # (mudança de major merece revisão dedicada).
+      minor-and-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
