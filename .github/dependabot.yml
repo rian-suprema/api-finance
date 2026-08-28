@@ -3,18 +3,21 @@
 # repositório (os 5 jobs) valida cada PR como qualquer outro.
 #
 # Security updates (bump quando sai um advisory) já vêm ligados por padrão nas
-# Settings do repo. Este arquivo habilita os VERSION updates semanais e agrupa
+# Settings do repo. Este arquivo habilita os VERSION updates DIÁRIOS e agrupa
 # minor/patch num único PR para reduzir ruído.
 version: 2
 updates:
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
-      interval: 'weekly'
+      interval: 'daily'
     open-pull-requests-limit: 10
     commit-message:
-      # Conventional Commits — mantém o histórico no padrão do projeto
-      prefix: 'chore'
+      # Prefixos distintos por natureza da dependência (Conventional Commits):
+      #   build(deps)     → dependência de PRODUÇÃO (afeta o artefato/runtime)
+      #   chore(deps-dev) → devDependency (manutenção, não vai para a imagem)
+      prefix: 'build'
+      prefix-development: 'chore'
       include: 'scope'
     groups:
       # Um PR só para todos os minor/patch; majors ficam em PRs individuais
