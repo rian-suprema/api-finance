@@ -56,6 +56,13 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 80, skipBlankLines: true, skipComments: true }],
       'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
       'max-depth': ['error', 4],
+      // Import não usado já é coberto por @typescript-eslint/no-unused-vars
+      // (type-aware, reconhece uso via DECORATOR como @Exclude()). A regra do
+      // sonarjs é redundante E frágil: quando o parser (typescript-eslint) muda
+      // a AST dos decorators num bump, ela falso-positiva imports usados só em
+      // decorator. Desligada para não quebrar o build por atualização de
+      // toolchain — a cobertura real permanece no typescript-eslint.
+      'sonarjs/unused-import': 'off',
     },
   },
   {
