@@ -3,8 +3,15 @@
 # repositório (os 5 jobs) valida cada PR como qualquer outro.
 #
 # Security updates (bump quando sai um advisory) já vêm ligados por padrão nas
-# Settings do repo. Este arquivo habilita os VERSION updates DIÁRIOS e agrupa
-# minor/patch num único PR para reduzir ruído.
+# Settings do repo. Este arquivo governa os VERSION updates DIÁRIOS.
+#
+# Princípio anti-ruído (ver README §CI/CD): o Dependabot separa cada dependência
+# em um PR. Para pacotes que SÓ funcionam se subirem juntos (o eslint e seu
+# ecossistema; o jest e o ts-jest), um PR por pacote quebra o peer e nunca é
+# mergeável. Por isso agrupamos toolchains coesos — o PR do grupo sobe o
+# conjunto e passa no CI. Majors que DEVEM trilhar o runtime (@types/node segue
+# o Node; typescript 7 ainda sem suporte do typescript-eslint) são ignorados
+# aqui para não reabrir todo ciclo.
 version: 2
 updates:
   - package-ecosystem: 'npm'
@@ -19,9 +26,40 @@ updates:
       prefix: 'build'
       prefix-development: 'chore'
       include: 'scope'
+    ignore:
+      # @types/node acompanha a MAJOR do Node em uso (engines: >=22 <23). Types
+      # de uma major além do runtime descrevem APIs inexistentes — compila e
+      # quebra em produção. Minor/patch dentro do 22.x seguem fluindo.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # TypeScript 7 (reescrita nativa) ainda NÃO é suportado pelo ecossistema:
+      # typescript-eslint declara peer `typescript <6.1.0`. Reavaliar quando o
+      # typescript-eslint publicar suporte ao TS 7.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
     groups:
-      # Um PR só para todos os minor/patch; majors ficam em PRs individuais
-      # (mudança de major merece revisão dedicada).
+      # ── Toolchains coesos: pacotes que precisam subir JUNTOS ────────────────
+      # (grupos SEM update-types capturam major+minor+patch). Um dependency cai
+      # no PRIMEIRO grupo cuja lista casa — por isso os específicos vêm antes do
+      # catch-all minor-and-patch.
+      eslint:
+        patterns:
+          - 'eslint'
+          - '@eslint/*'
+          - 'typescript-eslint'
+          - 'eslint-plugin-*'
+          - 'eslint-config-*'
+          - 'globals'
+      jest:
+        patterns:
+          - 'jest'
+          - '@types/jest'
+          - 'ts-jest'
+      commitlint:
+        patterns:
+          - '@commitlint/*'
+      # ── Todo o resto: minor/patch num PR só; majors avulsos ficam individuais
+      #    (major de lib única merece revisão dedicada). ────────────────────────
       minor-and-patch:
         patterns: ['*']
         update-types: ['minor', 'patch']
