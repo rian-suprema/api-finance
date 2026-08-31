@@ -16,3 +16,16 @@ export const PETSHOP_USERS = {
   EDIT: 'petshop.users.edit',
   DELETE: 'petshop.users.delete',
 } as const;
+
+export const FINANCE_CASH_BALANCE = {
+  SUMMARY_READ: 'finance.cash-balance.summary.read',
+  BANKS_READ: 'finance.cash-balance.banks.read',
+  BANKS_CONFIRM: 'finance.cash-balance.banks.confirm',
+  REGISTER_CREATE: 'finance.cash-balance.register.create',
+} as const;
+
+export const FINANCE_RECONCILIATION = {
+  READ: 'finance.reconciliation.read',
+  RUN: 'finance.reconciliation.run',
+  RESOLVE: 'finance.reconciliation.resolve',
+} as const;

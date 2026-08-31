@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-08-31T17:56:38.229Z"
+    "lastUpdated": "2026-08-31T18:32:26.775Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 2,
+    "completed": 3,
     "inProgress": 0,
-    "pending": 15,
+    "pending": 14,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 6,
-    "hoursRemaining": 66,
-    "percentComplete": 11.8,
-    "totalCostUsd": 8.34,
-    "projectedTotalCostUsd": 107.45
+    "hoursCompleted": 8,
+    "hoursRemaining": 64,
+    "percentComplete": 17.6,
+    "totalCostUsd": 13.12,
+    "projectedTotalCostUsd": 126.74
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 228,
-    "totalOutputTokens": 111366,
-    "totalCacheWriteTokens": 222715,
-    "totalCacheReadTokens": 19446376,
-    "totalCostUsd": 8.34,
-    "projectedTotalCostUsd": 107.45,
-    "costCalibrationFactor": 0.139,
+    "totalInputTokens": 384,
+    "totalOutputTokens": 173844,
+    "totalCacheWriteTokens": 384603,
+    "totalCacheReadTokens": 30220705,
+    "totalCostUsd": 13.12,
+    "projectedTotalCostUsd": 126.74,
+    "costCalibrationFactor": 0.164,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -77,6 +77,12 @@
         "output": 111366,
         "cacheWrite": 222715,
         "cacheRead": 19446376
+      },
+      "fc6afc0d-4c62-46f2-ad07-946253c8ae8e": {
+        "input": 156,
+        "output": 62478,
+        "cacheWrite": 161888,
+        "cacheRead": 10774329
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -151,21 +157,30 @@
     {
       "id": 3,
       "name": "Esqueleto não-funcional + allowlist + contrato de erro",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 2,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-08-31",
+      "completedDate": "2026-08-31",
       "dependsOn": [],
       "description": "Módulos vazios registrados no AppModule, 8 permissões, Joi/registerAs novos, 2 regras de allowlist no architecture.spec.ts, GlobalExceptionFilter preservando campos extras, dev stubs",
-      "notes": [],
+      "notes": [
+        "O script orgânico do próprio FASE-03.md herdou o defeito já documentado na Fase 01 (grep em --verbose do Jest 30, que não lista testes que passaram) — corrigido para --json + jq antes de considerar RED/GREEN confiável.",
+        "Jest 30 também renomeou --testPathPattern para --testPathPatterns — comandos de regressão dos FASE-*.md precisam da flag nova.",
+        "sonarjs/todo-tag deu falso positivo em comentários portados literalmente da origem que usavam a palavra 'Todo/todo' como pronome em português ('todo o módulo', 'todo valor monetário') — reescritos preservando o sentido.",
+        "7 permissões (4 FINANCE_CASH_BALANCE + 3 FINANCE_RECONCILIATION), não 8: o próprio bloco de código do FASE-03.md já exclui EXPORT deliberadamente ('evita permissão morta'); o texto do objetivo ('8 permissões') ficou desatualizado, a implementação seguiu o código do plano.",
+        "date.util.ts, tax-number.util.ts e finance-dev-stubs.js portados literalmente de /home/feh/sayplus-modules/finance (finance-api + scripts/dev-stubs.js da origem, presentes no disco local) — não existiam cópia no repositório antes desta fase.",
+        "15 erros de npm run lint pré-existentes em código das Fases 01/02 (finance-*/domain/**) ficaram registrados como débito conhecido, fora do escopo desta fase — nenhum arquivo tocado pela Fase 03 tem erro de lint.",
+        "Verificação manual das 2 regras novas do architecture.spec.ts: violações reais plantadas temporariamente (axios fora de infrastructure/trio, @clickhouse/client fora das pastas permitidas) foram detectadas corretamente; arquivos plantados removidos antes do commit.",
+        "scripts/finance-dev-stubs.js validado por node --check + diff de fidelidade contra a origem + chamada real nas 3 portas — o processo original da origem já estava rodando nas mesmas portas durante a verificação (não finalizado, por não ser desta sessão/repositório)."
+      ],
       "criteria": {
         "total": 14,
-        "passed": 0
+        "passed": 14
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 62478,
+      "costUsd": 4.777,
       "estimatedCostUsd": 20,
       "files": [
         "src/modules/finance-cash-balance/cash-balance.module.ts",

@@ -30,3 +30,30 @@ export const databaseConfig = registerAs('database', () => ({
   database: process.env.DB_NAME,
   ssl: process.env.DB_SSL === 'true',
 }));
+
+export const clickhouseConfig = registerAs('clickhouse', () => ({
+  url: process.env.CLICKHOUSE_URL,
+  user: process.env.CLICKHOUSE_USER,
+  password: process.env.CLICKHOUSE_PASSWORD,
+  database: process.env.CLICKHOUSE_DATABASE ?? 'dw_bet',
+}));
+
+export const trioConfig = registerAs('trio', () => ({
+  baseUrl: process.env.TRIO_BASE_URL,
+  clientId: process.env.TRIO_CLIENT_ID,
+  clientSecret: process.env.TRIO_CLIENT_SECRET,
+  amountDivisor: parseInt(process.env.TRIO_AMOUNT_DIVISOR ?? '1', 10),
+  accountIds: {
+    suprema: process.env.TRIO_ACCOUNT_ID_SUPREMA,
+    ultra: process.env.TRIO_ACCOUNT_ID_ULTRA,
+    maxima: process.env.TRIO_ACCOUNT_ID_MAXIMA,
+  },
+}));
+
+export const platformConfig = registerAs('platform', () => ({
+  apiUrl: process.env.SAYPLUS_API_URL,
+}));
+
+export const reconciliationConfig = registerAs('reconciliation', () => ({
+  bankKeyField: process.env.RECONCILIATION_BANK_KEY_FIELD ?? 'external_id',
+}));

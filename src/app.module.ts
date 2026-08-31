@@ -7,11 +7,21 @@ import { AuthModule } from './auth/auth.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
-import { appConfig, authConfig, databaseConfig } from './config/configuration';
+import {
+  appConfig,
+  authConfig,
+  clickhouseConfig,
+  databaseConfig,
+  platformConfig,
+  reconciliationConfig,
+  trioConfig,
+} from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { TenantTransactionInterceptor } from './database/tenant-transaction.interceptor';
 import { HealthModule } from './health/health.module';
+import { CashBalanceModule } from './modules/finance-cash-balance/cash-balance.module';
+import { ReconciliationModule } from './modules/finance-reconciliation/reconciliation.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -20,7 +30,15 @@ import { UsersModule } from './modules/users/users.module';
       isGlobal: true,
       cache: true,
       envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
-      load: [appConfig, authConfig, databaseConfig],
+      load: [
+        appConfig,
+        authConfig,
+        databaseConfig,
+        clickhouseConfig,
+        trioConfig,
+        platformConfig,
+        reconciliationConfig,
+      ],
       validationSchema: envValidationSchema,
       validationOptions: { abortEarly: false },
     }),
@@ -45,6 +63,8 @@ import { UsersModule } from './modules/users/users.module';
     HealthModule,
     // Módulos de negócio
     UsersModule,
+    CashBalanceModule,
+    ReconciliationModule,
   ],
   providers: [
     // Pipes/filters/interceptors globais registrados via DI (APP_*) — forma

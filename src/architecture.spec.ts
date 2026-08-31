@@ -163,4 +163,43 @@ describe('Arquitetura do archetype (variante simples)', () => {
       .check();
     expect(violations).toStrictEqual([]);
   });
+
+  // ADR-FINANCE-1: HTTP externo (axios) só dentro dos adapters nomeados — Trio
+  // (integração bancária) e platform (GET /auth/me da SayPlus, Fase 08). Duas
+  // pastas, não "infrastructure/** de qualquer módulo": a intenção é nomear
+  // cada capacidade que entra, não abrir um allowlist genérico.
+  it('axios cru só existe nos adapters da Trio e da identidade da plataforma', async () => {
+    const violations = await projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo(
+        (file) =>
+          isSpecFile(file.path) ||
+          file.directory.includes('infrastructure/trio') ||
+          file.directory.includes('infrastructure/platform') ||
+          !/from 'axios'/.test(file.content),
+        'axios só é permitido em modules/finance-*/infrastructure/{trio,platform}/** — ' +
+          'HTTP externo em outro lugar é decisão que precisa de ADR próprio',
+      )
+      .check();
+    expect(violations).toStrictEqual([]);
+  });
+
+  // ADR-FINANCE-2: ClickHouse é read-model, confinado à pasta que existe pra isso.
+  it('@clickhouse/client só existe em src/clickhouse/ e nos adapters de leitura', async () => {
+    const violations = await projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo(
+        (file) =>
+          isSpecFile(file.path) ||
+          file.directory.includes('src/clickhouse') ||
+          file.directory.includes('infrastructure/clickhouse') ||
+          !/from '@clickhouse\/client'/.test(file.content),
+        '@clickhouse/client só é permitido em src/clickhouse/** e em ' +
+          'infrastructure/clickhouse/** de cada módulo',
+      )
+      .check();
+    expect(violations).toStrictEqual([]);
+  });
 });

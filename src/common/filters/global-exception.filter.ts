@@ -9,12 +9,18 @@ import {
 import { Request, Response } from 'express';
 
 /**
- * Corpo de erro no contrato único do archetype: { code, message }.
+ * Corpo de erro no contrato único do archetype: { code, message }, mais
+ * campos extras estruturados que a exceção de origem carregar (ex.:
+ * `pendingBanks` do registro do balanço, Fase 08).
  */
 interface ErrorBody {
   code: string;
   message: string;
+  [key: string]: unknown;
 }
+
+/** Chaves que o Nest já injeta em getResponse() por padrão — nunca duplicar. */
+const NEST_DEFAULT_KEYS = new Set(['statusCode', 'message', 'error']);
 
 /**
  * Filtro global de exceções (catch-all).
@@ -41,6 +47,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       body = {
         code: HttpStatus[status] ?? `HTTP_${status}`,
         message: this.extractMessage(exception),
+        ...this.extractExtraFields(exception.getResponse()),
       };
     } else {
       const error = exception instanceof Error ? exception : new Error(String(exception));
@@ -64,5 +71,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return message.join('; ');
     }
     return message ?? exception.message;
+  }
+
+  /**
+   * Campos estruturados extras do payload da exceção (ex.: `pendingBanks`),
+   * excluindo as chaves que o Nest já injeta em getResponse() por padrão.
+   */
+  private extractExtraFields(res: unknown): Record<string, unknown> {
+    if (typeof res !== 'object' || res === null) return {};
+    return Object.fromEntries(
+      Object.entries(res as Record<string, unknown>).filter(([key]) => !NEST_DEFAULT_KEYS.has(key)),
+    );
   }
 }

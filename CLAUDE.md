@@ -42,13 +42,13 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 03 — Esqueleto não-funcional.**
+**Fase atual: 04 — Schema TypeORM.**
 
 | Fase | Nome | Status |
 |---|---|---|
 | 01 | Domínio puro — Conciliação + golden dataset | ✅ concluída |
 | 02 | Domínio puro — Balanço de Caixa | ✅ concluída |
-| 03 | Esqueleto não-funcional + allowlist + contrato de erro | pending |
+| 03 | Esqueleto não-funcional + allowlist + contrato de erro | ✅ concluída |
 | 04 | Schema TypeORM — 8 entidades + migration inicial | pending |
 | 05 | Integração ClickHouse — conexão global | pending |
 | 06 | Integração Trio — client + adapter point-in-time | pending |
@@ -86,6 +86,12 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
    sem guard nenhum hoje) é uma asserção de aplicação (`assertKnownBrand`), não RLS — ver Fase 15.
 6. **`TRIO_AMOUNT_DIVISOR`** (1 ou 100 — centavos vs reais) é ambíguo na documentação de origem e
    **não pode ser resolvido por leitura de código** — é PARADA HUMANA na Fase 06.
+7. **Fail-fast em tudo, sem exceção — convenção consolidada na Fase 03:** nenhuma das 14 variáveis
+   novas do Finance tem default de valor perigoso no Joi. Em particular `TRIO_AMOUNT_DIVISOR` é
+   `.required()` (`Joi.number().valid(1, 100)`), nunca `.default(1)` — mesmo já validado como "ambíguo,
+   PARADA HUMANA" no item 6, o boot cai sem ela em vez de assumir silenciosamente. Vale para toda
+   variável nova das Fases 04–17: default só quando o valor for inócuo (ex.: `CLICKHOUSE_DATABASE`),
+   nunca quando errar o valor custa 100× o valor real.
 
 ## Aprendizados críticos
 
@@ -116,6 +122,27 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   `BankType` foram declarados localmente em `cash-balance.types.ts` (`BrandKey = string`) em vez de
   importados de `cash-balance.constants.ts`, que só existe na Fase 07. `buildKpiCard` usa a própria
   chave da marca como `label` (sem lookup em `BRANDS`) até lá.
+- **Fase 03:** o script orgânico do próprio `FASE-03.md` tinha o mesmo defeito documentado na Fase 01
+  (`grep` na saída `--verbose` do Jest 30, que não lista testes que passaram) — o template da fase não
+  herdou a correção já registrada. Corrigido para `--json` + `jq` no
+  `scripts/esqueleto-financeiro/FASE-03-TESTE-ORGANICO.sh`; qualquer novo script orgânico deve nascer
+  já usando esse padrão, não copiar o texto literal do `FASE-*.md` sem revisar.
+- **Fase 03:** Jest 30 também renomeou a flag de filtro de suíte: `--testPathPattern` (citada nos
+  comandos de regressão dos `FASE-*.md`) não existe mais — é `--testPathPatterns`. Mesma família do
+  problema do `--verbose`; usar a flag nova em qualquer comando de regressão futuro.
+- **Fase 03:** a regra `sonarjs/todo-tag` do ESLint dá falso positivo em comentários em português que
+  usam a palavra "Todo"/"todo" como pronome ("todo o módulo", "todo valor monetário") — o linter casa
+  com o token em inglês `TODO` case-insensitive. Ao portar comentários literalmente da origem
+  (`date.util.ts`, `env.validation.ts`), reescrever a frase preservando o sentido em vez de suprimir a
+  regra.
+- **Fase 03:** 15 erros de `npm run lint` já existiam em código das Fases 01/02
+  (`finance-cash-balance/domain/**`, `finance-reconciliation/domain/**`) antes desta fase — nenhum
+  arquivo tocado pela Fase 03 tem erro de lint. Ficam registrados aqui como débito conhecido, não
+  corrigido (fora do escopo desta fase); decisão do usuário sobre quando limpar.
+- **Fase 03:** `scripts/finance-dev-stubs.js` e `src/common/utils/{date,tax-number}.util.ts` foram
+  portados literalmente de `/home/feh/sayplus-modules/finance` (`finance-api` + `scripts/dev-stubs.js`
+  da origem, presentes no disco local) — não havia cópia desses arquivos dentro deste repositório
+  antes da Fase 03.
 
 ## Convenções de teste
 
