@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-08-31T17:44:39.186Z"
+    "lastUpdated": "2026-08-31T17:56:38.229Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 1,
+    "completed": 2,
     "inProgress": 0,
-    "pending": 16,
+    "pending": 15,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 4,
-    "hoursRemaining": 68,
-    "percentComplete": 5.9,
-    "totalCostUsd": 4.82,
-    "projectedTotalCostUsd": 93.08
+    "hoursCompleted": 6,
+    "hoursRemaining": 66,
+    "percentComplete": 11.8,
+    "totalCostUsd": 8.34,
+    "projectedTotalCostUsd": 107.45
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,20 +63,20 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 142,
-    "totalOutputTokens": 83259,
-    "totalCacheWriteTokens": 167973,
-    "totalCacheReadTokens": 9792037,
-    "totalCostUsd": 4.82,
-    "projectedTotalCostUsd": 93.08,
-    "costCalibrationFactor": 0.1204,
+    "totalInputTokens": 228,
+    "totalOutputTokens": 111366,
+    "totalCacheWriteTokens": 222715,
+    "totalCacheReadTokens": 19446376,
+    "totalCostUsd": 8.34,
+    "projectedTotalCostUsd": 107.45,
+    "costCalibrationFactor": 0.139,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
-        "input": 142,
-        "output": 83259,
-        "cacheWrite": 167973,
-        "cacheRead": 9792037
+        "input": 228,
+        "output": 111366,
+        "cacheWrite": 222715,
+        "cacheRead": 19446376
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -121,23 +121,27 @@
     {
       "id": 2,
       "name": "Domínio puro — Balanço de Caixa",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 2,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-08-31",
+      "completedDate": "2026-08-31",
       "dependsOn": [
         1
       ],
       "description": "Porta kpi-card.util (sinal transacional−jogadores) + cash-balance.types; teste nomeado explicitamente pelo sinal do Total do Balanço",
-      "notes": [],
+      "notes": [
+        "BrandKey/BankType declarados provisoriamente como tipos locais em cash-balance.types.ts (BrandKey = string) — o catálogo real (BRANDS, cash-balance.constants.ts) só chega na Fase 07, conforme já antecipado no próprio FASE-02.md. buildKpiCard usa a própria chave da marca como label nesta fase (sem lookup no catálogo).",
+        "subtractByBrand não arredonda o resultado (preserva a subtração bruta) — só buildKpiCard arredonda via roundCurrency. O teste de arredondamento verifica a composição subtractByBrand → buildKpiCard, que é o caminho real de uso.",
+        "Abertura do dashboard no browser (live-server) não foi possível — ambiente headless, sem display. Best-effort registrado como pulado."
+      ],
       "criteria": {
         "total": 13,
-        "passed": 0
+        "passed": 13
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 28107,
+      "costUsd": 3.5234,
       "estimatedCostUsd": 20,
       "files": [
         "src/modules/finance-cash-balance/domain/kpi-card.util.ts",

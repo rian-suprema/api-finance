@@ -42,12 +42,12 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 02 — Domínio puro (Balanço de Caixa).**
+**Fase atual: 03 — Esqueleto não-funcional.**
 
 | Fase | Nome | Status |
 |---|---|---|
 | 01 | Domínio puro — Conciliação + golden dataset | ✅ concluída |
-| 02 | Domínio puro — Balanço de Caixa | pending |
+| 02 | Domínio puro — Balanço de Caixa | ✅ concluída |
 | 03 | Esqueleto não-funcional + allowlist + contrato de erro | pending |
 | 04 | Schema TypeORM — 8 entidades + migration inicial | pending |
 | 05 | Integração ClickHouse — conexão global | pending |
@@ -105,6 +105,17 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   (`ReconciliationBrandView`, `ReconciliationHistoryView`, `RunOutcome`, `CorrectionApplyView`,
   `CorrectionSearchView`) devem ser portadas só quando a fase que as consome (13/14) rodar, quando
   `BrandKey` já existir.
+- **Fase 02:** `scripts/update-phase-cost.js` recalcula `totalCostUsd`/`projectedTotalCostUsd`/
+  `summary.completed`/`summary.pending`, mas **não** recalcula `summary.percentComplete` nem
+  `summary.hoursCompleted`/`hoursRemaining` — ficam presos no valor anterior se não forem ajustados
+  à mão. O comentário no topo do arquivo pede para não editar a lógica compartilhada (fonte única no
+  skill `criar-fase`), então o ajuste é manual a cada fase: `percentComplete = completed/17*100` e
+  `hoursCompleted = soma de estimatedHours das fases completed` (não há tracking de `actualHours`
+  real). Repetir esse ajuste manual nas fases 03–17.
+- **Fase 02:** o mesmo padrão de tipo provisório da Fase 01 (`BrandKey`) se repetiu — `BrandKey` e
+  `BankType` foram declarados localmente em `cash-balance.types.ts` (`BrandKey = string`) em vez de
+  importados de `cash-balance.constants.ts`, que só existe na Fase 07. `buildKpiCard` usa a própria
+  chave da marca como `label` (sem lookup em `BRANDS`) até lá.
 
 ## Convenções de teste
 
