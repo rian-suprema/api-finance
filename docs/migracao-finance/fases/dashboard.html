@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Migração Finance — Dashboard de Fases</title>
+<style>
+  :root {
+    --bg: #0b0f19; --surface: #111827; --card: #1a2235; --border: #1f2d45;
+    --border-light: #263347; --text: #e2e8f0; --muted: #64748b; --muted-light: #94a3b8;
+    --accent: #6366f1; --green: #10b981; --amber: #f59e0b; --red: #ef4444;
+    --purple: #a78bfa; --blue: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+    padding: 24px; max-width: 1200px; margin: 0 auto;
+  }
+  a { color: var(--blue); }
+  header { margin-bottom: 24px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0 0 8px; color: var(--muted-light); }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tag {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 2px 10px; font-size: 12px; color: var(--muted-light);
+  }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 900px) {
+    .grid-5, .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+  }
+  .card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .card .value { font-size: 22px; font-weight: 600; }
+  .card .value.green { color: var(--green); }
+  .card .value.amber { color: var(--amber); }
+  .card .value.red { color: var(--red); }
+  .progress-wrap { margin-bottom: 20px; }
+  .progress-bar {
+    height: 10px; background: var(--surface); border-radius: 999px; overflow: hidden; border: 1px solid var(--border);
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); transition: width 0.3s;
+  }
+  .phase-dots { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .phase-dot {
+    width: 14px; height: 14px; border-radius: 50%; cursor: default;
+    border: 1px solid var(--border-light);
+  }
+  .phase-dot[data-s="completed"] { background: var(--green); border-color: var(--green); }
+  .phase-dot[data-s="inProgress"] { background: var(--amber); border-color: var(--amber); }
+  .phase-dot[data-s="pending"] { background: var(--surface); }
+  .budget-bar { margin-top: 10px; }
+  .section-title { font-size: 14px; color: var(--muted-light); margin: 24px 0 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; height: 280px; margin-bottom: 20px; }
+  .chart-box canvas { max-height: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  th { color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+  .status-pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .status-pill.completed { background: rgba(16,185,129,0.15); color: var(--green); }
+  .status-pill.inProgress { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .status-pill.pending { background: rgba(100,116,139,0.15); color: var(--muted-light); }
+  .model-pill { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+  .model-pill.haiku { color: var(--purple); background: rgba(167,139,250,0.12); }
+  .model-pill.sonnet { color: var(--blue); background: rgba(96,165,250,0.12); }
+  .model-pill.opus { color: var(--red); background: rgba(239,68,68,0.12); }
+  .mini-bar-wrap { display: inline-flex; align-items: center; gap: 6px; }
+  .mini-bar { width: 60px; height: 6px; background: var(--surface); border-radius: 999px; overflow: hidden; }
+  .mini-bar-fill { height: 100%; background: var(--accent); }
+  .criteria-dots { display: flex; gap: 2px; }
+  .criteria-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border-light); }
+  .criteria-dot.on { background: var(--green); border-color: var(--green); }
+  .daily-log-entry { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .daily-log-entry .date { color: var(--muted); font-size: 11px; }
+  .daily-log-entry .phase { font-weight: 600; margin: 2px 0; }
+  .notes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (max-width: 900px) { .notes-grid { grid-template-columns: 1fr; } }
+  .notes-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .notes-card .phase-name { font-weight: 600; margin-bottom: 6px; font-size: 13px; }
+  .notes-card ul { margin: 0; padding-left: 0; list-style: none; font-size: 12px; color: var(--muted-light); }
+  .notes-card li { margin-bottom: 4px; }
+  .notes-card li::before { content: '→ '; color: var(--accent); }
+  footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+  code { background: var(--surface); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Migração Finance</h1>
+  <p>cash-balance + reconciliation → users-api (TypeORM, ClickHouse, Trio)</p>
+  <div class="tags" id="stack-tags"><span class="tag">NestJS 11</span><span class="tag">TypeORM</span><span class="tag">PostgreSQL</span><span class="tag">ClickHouse</span><span class="tag">Trio banking-api</span><span class="tag">Jest</span></div>
+  <strong id="progress-summary">Carregando…</strong>
+</header>
+
+<div class="grid-5" id="summary-cards"></div>
+
+<div class="progress-wrap">
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  <div class="phase-dots" id="phase-dots"></div>
+</div>
+
+<div class="grid-4" id="estimate-row"></div>
+
+<div class="grid-4" id="cost-row"></div>
+<div class="budget-bar">
+  <div class="progress-bar"><div class="progress-fill" id="budget-fill" style="width:0%; background: linear-gradient(90deg, var(--accent), var(--amber));"></div></div>
+</div>
+
+<div class="section-title">Custo de IA por fase</div>
+<div class="chart-box"><canvas id="chart-cost"></canvas></div>
+
+<div class="section-title">Horas por fase</div>
+<div class="chart-box"><canvas id="chart-hours"></canvas></div>
+
+<div class="grid-2">
+  <div class="chart-box"><canvas id="chart-status"></canvas></div>
+  <div class="chart-box"><canvas id="chart-criteria"></canvas></div>
+</div>
+
+<div class="section-title">Fases</div>
+<table id="phase-table">
+  <thead>
+    <tr>
+      <th>#</th><th>Nome</th><th>Status</th><th>Modelo</th>
+      <th>Horas (est/real)</th><th>Custo IA</th><th>Depende de</th><th>Critérios</th><th>Data</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div class="section-title">Diário</div>
+<div id="daily-log"></div>
+
+<div class="section-title">Notas técnicas</div>
+<div class="notes-grid" id="notes-grid"></div>
+
+<footer>
+  Servir com <code>npx serve docs/backend/fases</code> para que o dashboard leia <code>progress.json</code>
+  via <code>fetch</code> e reflita atualizações sem precisar recopiar o arquivo. Aberto direto como <code>file://</code>,
+  usa o snapshot <code>EMBEDDED</code> abaixo.
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+// Fallback embedded — snapshot do estado inicial; fetch carrega o JSON atualizado quando servido via HTTP
+const EMBEDDED = {"project":{"name":"Migração Finance → users-api","description":"Migração dos módulos cash-balance e reconciliation do SayPlus finance-api (Prisma) para o archetype (TypeORM), com RLS por marca no caminho job e integrações ClickHouse/Trio/SayPlus","stack":["NestJS 11","TypeORM","PostgreSQL","ClickHouse","Trio banking-api","Jest","Testcontainers"],"repository":"/home/feh/simplified-traditional-archetype","branch":"feature/migracao-finance","startDate":"2026-08-31","lastUpdated":"2026-08-31T17:44:39.186Z"},"summary":{"totalPhases":17,"completed":1,"inProgress":0,"pending":16,"totalEstimatedHours":72,"hoursCompleted":4,"hoursRemaining":68,"percentComplete":5.9,"totalCostUsd":4.82,"projectedTotalCostUsd":93.08},"dailyLog":[],"executionGroups":[{"group":"A","model":"claude-haiku-4-5-20251001","phases":[16],"rationale":"Ajuste de contrato do archetype (prefixo, Swagger, health, decimal) — padrão herdado, mecânico, baixo risco arquitetural"},{"group":"B","model":"claude-sonnet-5","phases":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17],"rationale":"Lógica de domínio com risco histórico documentado (sinal do balanço, casamento por chave, liquidação de estorno), integrações externas (ClickHouse, Trio, SayPlus), transações atômicas multi-tabela e fases com >10 arquivos"}],"aiCosts":{"totalInputTokens":142,"totalOutputTokens":83259,"totalCacheWriteTokens":167973,"totalCacheReadTokens":9792037,"totalCostUsd":4.82,"projectedTotalCostUsd":93.08,"costCalibrationFactor":0.1204,"costWithoutCacheUsd":0,"sessionCursors":{"8fef6769-552b-4469-a06b-078e169905ec":{"input":142,"output":83259,"cacheWrite":167973,"cacheRead":9792037}},"notes":"Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."},"phases":[{"id":1,"name":"Domínio puro — Conciliação + golden dataset","status":"completed","model":"claude-sonnet-5","estimatedHours":4,"actualHours":null,"startDate":"2026-08-31","completedDate":"2026-08-31","dependsOn":[],"description":"Porta matcher/refund-settlement/correction-matcher/correction-note/totals.util (lógica pura) + golden dataset Maxima 2026-08-15; testes unitários travando os 3 incidentes reais","notes":["Jest 30 não imprime nomes de teste que passaram no reporter --verbose (só de falhas) — o teste orgânico foi ajustado para ler --json via jq em vez de fazer grep na saída --verbose.","Inconsistência de path corrigida nesta fase: CLAUDE.md, os 17 FASE-*.md e scripts/update-phase-cost.js apontavam para docs/backend/fases/ (diretório vazio); os artefatos reais sempre estiveram em docs/migracao-finance/fases/. Referências corrigidas em todos os 19 arquivos.","BrandKey (definido só na Fase 07, cash-balance.constants.ts) foi removido do escopo desta fase: só os tipos efetivamente exercitados pelos testes (Movement, SettledMovement, SideTotals, FlowMatch, RunTotals, CorrectionConfidence) foram portados. As views que dependem de BrandKey (ReconciliationBrandView, ReconciliationHistoryView, RunOutcome, CorrectionApplyView, CorrectionSearchView) ficam para a fase que as usa de fato (13/14).","Abertura do dashboard no browser (live-server) não foi possível — ambiente de execução é headless, sem display. Best-effort registrado como pulado; dashboard.html EMBEDDED confirmado sincronizado por leitura direta do arquivo."],"criteria":{"total":15,"passed":15},"outputTokens":83259,"costUsd":4.8168,"estimatedCostUsd":40,"files":["src/modules/finance-reconciliation/domain/matcher.ts","src/modules/finance-reconciliation/domain/refund-settlement.ts","src/modules/finance-reconciliation/domain/correction-matcher.ts","src/modules/finance-reconciliation/domain/correction-note.ts","src/modules/finance-reconciliation/domain/totals.util.ts","src/modules/finance-reconciliation/domain/reconciliation.types.ts","src/modules/finance-reconciliation/reconciliation.constants.ts","src/common/utils/number.util.ts","test/fixtures/reconciliation-maxima-2026-08-15.json"]},{"id":2,"name":"Domínio puro — Balanço de Caixa","status":"pending","model":"claude-sonnet-5","estimatedHours":2,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[1],"description":"Porta kpi-card.util (sinal transacional−jogadores) + cash-balance.types; teste nomeado explicitamente pelo sinal do Total do Balanço","notes":[],"criteria":{"total":13,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":20,"files":["src/modules/finance-cash-balance/domain/kpi-card.util.ts","src/modules/finance-cash-balance/domain/cash-balance.types.ts"]},{"id":3,"name":"Esqueleto não-funcional + allowlist + contrato de erro","status":"pending","model":"claude-sonnet-5","estimatedHours":2,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[],"description":"Módulos vazios registrados no AppModule, 8 permissões, Joi/registerAs novos, 2 regras de allowlist no architecture.spec.ts, GlobalExceptionFilter preservando campos extras, dev stubs","notes":[],"criteria":{"total":14,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":20,"files":["src/modules/finance-cash-balance/cash-balance.module.ts","src/modules/finance-reconciliation/reconciliation.module.ts","src/auth/permissions.constants.ts","src/config/configuration.ts","src/config/env.validation.ts","src/architecture.spec.ts","src/common/filters/global-exception.filter.ts","src/common/utils/date.util.ts","src/common/utils/tax-number.util.ts","src/app.module.ts","scripts/finance-dev-stubs.js"]},{"id":4,"name":"Schema TypeORM — 8 entidades + migration inicial","status":"pending","model":"claude-sonnet-5","estimatedHours":3,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[3],"description":"8 entidades TypeORM (PK SERIAL), 10 enums, transformer Decimal↔string, migration FinanceInitialSchema em SQL explícito","notes":[],"criteria":{"total":13,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":30,"files":["src/modules/finance-cash-balance/entities/cash-balance-day.entity.ts","src/modules/finance-cash-balance/entities/cash-balance-daily.entity.ts","src/modules/finance-cash-balance/entities/cash-balance-bank-entry.entity.ts","src/modules/finance-cash-balance/entities/cash-balance-brand-snapshot.entity.ts","src/modules/finance-cash-balance/entities/trio-closing-balance.entity.ts","src/modules/finance-cash-balance/entities/finance-audit-log.entity.ts","src/modules/finance-reconciliation/entities/reconciliation-run.entity.ts","src/modules/finance-reconciliation/entities/reconciliation-item.entity.ts","src/common/transformers/decimal.transformer.ts","src/database/migrations/<timestamp>-FinanceInitialSchema.ts"]},{"id":5,"name":"Integração ClickHouse — conexão global","status":"pending","model":"claude-sonnet-5","estimatedHours":3,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[3],"description":"src/clickhouse/ (módulo global, ClickHouseService com query_params nomeados, nunca string interpolada)","notes":[],"criteria":{"total":13,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":36,"files":["src/clickhouse/clickhouse.module.ts","src/clickhouse/clickhouse.service.ts","src/clickhouse/clickhouse.service.spec.ts"]},{"id":6,"name":"Integração Trio — client + adapter point-in-time","status":"pending","model":"claude-sonnet-5","estimatedHours":5,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[3],"description":"trio-banking.client.ts (varredura por bisseção, retry) + trio-point-in-time-balance.source.ts + port; PARADA HUMANA para confirmar TRIO_AMOUNT_DIVISOR","notes":[],"criteria":{"total":14,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":60,"files":["src/modules/finance-cash-balance/infrastructure/trio/trio-banking.client.ts","src/modules/finance-cash-balance/infrastructure/trio/trio-point-in-time-balance.source.ts","src/modules/finance-cash-balance/domain/ports/closing-balance-source.port.ts","src/modules/finance-cash-balance/infrastructure/trio/trio-banking.client.spec.ts"]},{"id":7,"name":"Persistência do Balanço de Caixa (repositórios + read-service)","status":"pending","model":"claude-sonnet-5","estimatedHours":4,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[4,5],"description":"cash-balance.repository.ts, trio-closing-balance.repository.ts, clickhouse-read.service.ts — TypeORM (Repository/QueryBuilder), transações do registerBrand","notes":[],"criteria":{"total":14,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":40,"files":["src/modules/finance-cash-balance/infrastructure/cash-balance.repository.ts","src/modules/finance-cash-balance/infrastructure/trio-closing-balance.repository.ts","src/modules/finance-cash-balance/infrastructure/clickhouse/clickhouse-read.service.ts","src/modules/finance-cash-balance/cash-balance.constants.ts"]},{"id":8,"name":"Identidade da plataforma (/auth/me) + BrandAccessService","status":"pending","model":"claude-sonnet-5","estimatedHours":4,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[3],"description":"platform-identity.service.ts (cache 60s por hash SHA-256 do token, nunca o token em log) + brand-access.service.ts (resolveBrands/requireBrand/resolveReferenceDate/resolveRange) — pré-requisito de AMBOS os módulos de negócio","notes":[],"criteria":{"total":14,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":48,"files":["src/modules/finance-cash-balance/infrastructure/platform/platform-identity.service.ts","src/modules/finance-cash-balance/domain/services/brand-access.service.ts","src/modules/finance-cash-balance/infrastructure/platform/platform-identity.service.spec.ts"]},{"id":9,"name":"Balanço de Caixa — use-cases + services + controller","status":"pending","model":"claude-sonnet-5","estimatedHours":6,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[1,2,6,7,8],"description":"9 use-cases, 3 services (read/registry/registro), controller com as 7 rotas, DTOs, wiring do módulo — as 4 rotas GET nunca chamam Trio em tempo de request","notes":[],"criteria":{"total":17,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":69,"files":["src/modules/finance-cash-balance/domain/use-cases/get-summary.use-case.ts","src/modules/finance-cash-balance/domain/use-cases/get-banks-state.use-case.ts","src/modules/finance-cash-balance/domain/use-cases/get-history.use-case.ts","src/modules/finance-cash-balance/domain/use-cases/refresh-trio.use-case.ts","src/modules/finance-cash-balance/domain/use-cases/confirm-bank.use-case.ts","src/modules/finance-cash-balance/domain/use-cases/register-brand.use-case.ts","src/modules/finance-cash-balance/domain/use-cases/reopen-brand.use-case.ts","src/modules/finance-cash-balance/domain/services/cash-balance-read.service.ts","src/modules/finance-cash-balance/domain/services/cash-balance-registry.service.ts","src/modules/finance-cash-balance/presenters/controllers/cash-balance.controller.ts","src/modules/finance-cash-balance/dto/cash-balance.dto.ts"]},{"id":10,"name":"Persistência da Conciliação (repositório)","status":"pending","model":"claude-sonnet-5","estimatedHours":5,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[4],"description":"reconciliation.repository.ts (partido em run-repository/item-repository se estourar max-lines:400) — upsert por chave natural preservando nota/status/autor","notes":[],"criteria":{"total":14,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":50,"files":["src/modules/finance-reconciliation/infrastructure/reconciliation-run.repository.ts","src/modules/finance-reconciliation/infrastructure/reconciliation-item.repository.ts","src/modules/finance-reconciliation/reconciliation.constants.ts"]},{"id":11,"name":"ClickHouse da Conciliação (movimentos + busca de correção)","status":"pending","model":"claude-sonnet-5","estimatedHours":5,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[5],"description":"platform-movements.service.ts (FINAL, deposit_ts×transaction_date) + correction-search.service.ts (ponte CPF→client_id + coluna cpf direta)","notes":[],"criteria":{"total":14,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":60,"files":["src/modules/finance-reconciliation/infrastructure/clickhouse/platform-movements.service.ts","src/modules/finance-reconciliation/infrastructure/clickhouse/correction-search.service.ts","src/modules/finance-reconciliation/infrastructure/clickhouse/platform-movements.service.spec.ts"]},{"id":12,"name":"Trio — movimentos por bisseção + regressão","status":"pending","model":"claude-sonnet-5","estimatedHours":5,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[6],"description":"trio-movements.service.ts — classificação (tesouraria/estorno/fee), teste de regressão do caso real (janela 10h, 5.234 via cursor vs 5.236 reais)","notes":[],"criteria":{"total":14,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":60,"files":["src/common/utils/uuid.util.ts","src/modules/finance-reconciliation/infrastructure/trio/trio-movements.service.ts","src/modules/finance-reconciliation/infrastructure/trio/trio-movements.service.spec.ts"]},{"id":13,"name":"Conciliação — use-cases núcleo + controller","status":"pending","model":"claude-sonnet-5","estimatedHours":6,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[1,8,10,11,12],"description":"get-reconciliation, get-reconciliation-history, run-reconciliation, resolve-item, reopen-item + ReconciliationService + rotas 8,9,10,13,14 do controller","notes":[],"criteria":{"total":17,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":69,"files":["src/modules/finance-reconciliation/domain/use-cases/get-reconciliation.use-case.ts","src/modules/finance-reconciliation/domain/use-cases/get-reconciliation-history.use-case.ts","src/modules/finance-reconciliation/domain/use-cases/run-reconciliation.use-case.ts","src/modules/finance-reconciliation/domain/use-cases/resolve-item.use-case.ts","src/modules/finance-reconciliation/domain/use-cases/reopen-item.use-case.ts","src/modules/finance-reconciliation/domain/services/reconciliation.service.ts","src/modules/finance-reconciliation/presenters/controllers/reconciliation.controller.ts","src/modules/finance-reconciliation/dto/reconciliation.dto.ts","src/modules/finance-reconciliation/reconciliation.module.ts"]},{"id":14,"name":"Conciliação — evidência de correção de saldo","status":"pending","model":"claude-sonnet-5","estimatedHours":4,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[1,11,13],"description":"search-corrections + apply-correction-matches use-cases + CorrectionEvidenceService + rotas 11,12 do controller","notes":[],"criteria":{"total":15,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":48,"files":["src/modules/finance-reconciliation/domain/use-cases/search-corrections.use-case.ts","src/modules/finance-reconciliation/domain/use-cases/apply-correction-matches.use-case.ts","src/modules/finance-reconciliation/domain/services/correction-evidence.service.ts"]},{"id":15,"name":"Jobs — CronJob Helm + crons + 5 CLIs + RLS no caminho job","status":"pending","model":"claude-sonnet-5","estimatedHours":6,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[9,13,14],"description":"deploy/helm CronJob (substitui @Cron in-process pelo problema de replicaCount:2), 5 CLIs Node, runInTenantContext por marca no caminho job (defesa em profundidade)","notes":[],"criteria":{"total":15,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":60,"files":["src/modules/finance-cash-balance/domain/use-cases/capture-trio-closing.use-case.ts","src/modules/finance-cash-balance/domain/use-cases/import-balance-history.use-case.ts","src/cli/run-reconciliation.ts","src/cli/capture-trio-closing.ts","src/cli/import-balance-history.ts","src/cli/export-trio-statement.ts","src/cli/export-trio-transactions.ts","deploy/helm/users-api/templates/cronjob.yaml","deploy/helm/users-api/values.yaml","deploy/infra/requirements.yaml"]},{"id":16,"name":"Contrato do archetype (prefixo/Swagger/health/decimal)","status":"pending","model":"claude-haiku-4-5-20251001","estimatedHours":2,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[9,13,14],"description":"confirma prefixo api/v1, Swagger opt-in fora de produção, readiness só Postgres (ClickHouse/Trio como alerta), auditoria de transformer Decimal em todas as colunas monetárias","notes":[],"criteria":{"total":13,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":3,"files":["src/main.ts","src/health/health.controller.ts"]},{"id":17,"name":"Fechamento — e2e completo, quality gates, cutover","status":"pending","model":"claude-sonnet-5","estimatedHours":6,"actualHours":null,"startDate":null,"completedDate":null,"dependsOn":[15,16],"description":"e2e Testcontainers com stubs Trio/ClickHouse/identidade, 190 verificações do smoke-test portadas, quality gates completos, requirements.yaml final, revisão de performance do CLAUDE.md + sincronização do code-review-graph","notes":[],"criteria":{"total":18,"passed":0},"outputTokens":null,"costUsd":null,"estimatedCostUsd":60,"files":["test/finance-cash-balance.e2e-spec.ts","test/finance-reconciliation.e2e-spec.ts","test/finance-smoke.e2e-spec.ts","deploy/infra/requirements.yaml"]}]};
+
+// Prefixo de ID das fases — adaptar por projeto: 'F' para features, 'R' para refactors, etc.
+function phaseId(id) { return 'F' + String(id).padStart(2, '0'); }
+
+function modelClass(model) {
+  if (!model) return '';
+  if (model.includes('haiku')) return 'haiku';
+  if (model.includes('opus')) return 'opus';
+  return 'sonnet';
+}
+
+function modelLabel(model) {
+  if (!model) return '—';
+  if (model.includes('haiku')) return 'Haiku';
+  if (model.includes('opus')) return 'Opus';
+  return 'Sonnet';
+}
+
+function fmtUsd(v) { return '$' + (v ?? 0).toFixed(2); }
+
+async function load() {
+  try {
+    const r = await fetch('./progress.json');
+    if (!r.ok) throw 0;
+    return await r.json();
+  } catch {
+    return EMBEDDED;
+  }
+}
+
+function groupModelFor(d, id) {
+  const pid = phaseId(id);
+  const g = (d.executionGroups || []).find((g) => (g.phases || []).includes(pid));
+  return g ? g.model : null;
+}
+
+function render(d) {
+  const s = d.summary;
+  document.getElementById('progress-summary').textContent =
+    `${s.percentComplete ?? 0}% concluído — ${s.completed}/${s.totalPhases} fases`;
+
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="card"><div class="label">Total de fases</div><div class="value">${s.totalPhases}</div></div>
+    <div class="card"><div class="label">Concluídas</div><div class="value green">${s.completed}</div></div>
+    <div class="card"><div class="label">Em andamento</div><div class="value amber">${s.inProgress}</div></div>
+    <div class="card"><div class="label">Pendentes</div><div class="value">${s.pending}</div></div>
+    <div class="card"><div class="label">Horas restantes</div><div class="value">${s.hoursRemaining ?? 0}h</div></div>
+  `;
+
+  document.getElementById('progress-fill').style.width = `${s.percentComplete ?? 0}%`;
+
+  document.getElementById('phase-dots').innerHTML = d.phases
+    .map((p) => `<div class="phase-dot" data-s="${p.status}" title="${phaseId(p.id)} — ${p.name}"></div>`)
+    .join('');
+
+  const nextPhase = d.phases.find((p) => p.status !== 'completed');
+  document.getElementById('estimate-row').innerHTML = `
+    <div class="card"><div class="label">Horas restantes</div><div class="value">${s.hoursRemaining ?? 0}h</div></div>
+    <div class="card"><div class="label">Horas concluídas</div><div class="value">${s.hoursCompleted ?? 0}h</div></div>
+    <div class="card"><div class="label">Total estimado</div><div class="value">${s.totalEstimatedHours ?? 0}h</div></div>
+    <div class="card"><div class="label">Próxima fase</div><div class="value" style="font-size:15px">${nextPhase ? phaseId(nextPhase.id) + ' — ' + nextPhase.name : '—'}</div></div>
+  `;
+
+  const ai = d.aiCosts || {};
+  const spent = ai.totalCostUsd ?? 0;
+  const projected = ai.projectedTotalCostUsd ?? 0;
+  const remaining = Math.max(0, projected - spent);
+  const withoutCache = ai.costWithoutCacheUsd ?? 0;
+  const savedPct = withoutCache > 0 ? Math.round((1 - spent / withoutCache) * 100) : 0;
+
+  document.getElementById('cost-row').innerHTML = `
+    <div class="card"><div class="label">Gasto atual</div><div class="value">${fmtUsd(spent)}</div></div>
+    <div class="card"><div class="label">Projeção total</div><div class="value">${fmtUsd(projected)}</div></div>
+    <div class="card"><div class="label">Restante estimado</div><div class="value">${fmtUsd(remaining)}</div></div>
+    <div class="card"><div class="label">Economia via cache</div><div class="value green">${savedPct}%</div></div>
+  `;
+
+  document.getElementById('budget-fill').style.width = `${projected > 0 ? Math.min(100, Math.round((spent / projected) * 100)) : 0}%`;
+
+  const completedPhases = d.phases.filter((p) => p.status === 'completed');
+  const pendingPhases = d.phases.filter((p) => p.status !== 'completed');
+
+  new Chart(document.getElementById('chart-cost'), {
+    type: 'bar',
+    data: {
+      labels: d.phases.map((p) => phaseId(p.id)),
+      datasets: [{
+        label: 'Custo IA (USD)',
+        data: d.phases.map((p) => p.costUsd ?? p.estimatedCostUsd ?? 0),
+        backgroundColor: d.phases.map((p) => (p.status === 'completed' ? '#10b981' : '#6366f1')),
+      }],
+    },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } } },
+  });
+
+  new Chart(document.getElementById('chart-hours'), {
+    type: 'bar',
+    data: {
+      labels: d.phases.map((p) => phaseId(p.id)),
+      datasets: [
+        { label: 'Estimado', data: d.phases.map((p) => p.estimatedHours ?? 0), backgroundColor: '#263347' },
+        { label: 'Real', data: d.phases.map((p) => p.actualHours ?? 0), backgroundColor: '#6366f1' },
+      ],
+    },
+    options: { maintainAspectRatio: false },
+  });
+
+  new Chart(document.getElementById('chart-status'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Concluídas', 'Em andamento', 'Pendentes'],
+      datasets: [{ data: [s.completed, s.inProgress, s.pending], backgroundColor: ['#10b981', '#f59e0b', '#64748b'] }],
+    },
+    options: { maintainAspectRatio: false },
+  });
+
+  new Chart(document.getElementById('chart-criteria'), {
+    type: 'bar',
+    data: {
+      labels: d.phases.map((p) => phaseId(p.id)),
+      datasets: [
+        { label: 'Aprovados', data: d.phases.map((p) => p.criteria?.passed ?? 0), backgroundColor: '#10b981' },
+        { label: 'Pendentes', data: d.phases.map((p) => Math.max(0, (p.criteria?.total ?? 0) - (p.criteria?.passed ?? 0))), backgroundColor: '#263347' },
+      ],
+    },
+    options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } },
+  });
+
+  document.querySelector('#phase-table tbody').innerHTML = d.phases
+    .map((p) => {
+      const hoursPct = p.estimatedHours ? Math.min(100, Math.round(((p.actualHours ?? 0) / p.estimatedHours) * 100)) : 0;
+      const critTotal = p.criteria?.total ?? 0;
+      const critPassed = p.criteria?.passed ?? 0;
+      const dots = Array.from({ length: critTotal }, (_, i) => `<span class="criteria-dot ${i < critPassed ? 'on' : ''}"></span>`).join('');
+      return `
+        <tr>
+          <td>${phaseId(p.id)}</td>
+          <td>${p.name}</td>
+          <td><span class="status-pill ${p.status}">${p.status}</span></td>
+          <td><span class="model-pill ${modelClass(p.model)}">${modelLabel(p.model)}</span></td>
+          <td>
+            <div class="mini-bar-wrap">
+              <span>${p.estimatedHours ?? 0}h / ${p.actualHours ?? '—'}h</span>
+              <div class="mini-bar"><div class="mini-bar-fill" style="width:${hoursPct}%"></div></div>
+            </div>
+          </td>
+          <td>${p.costUsd != null ? fmtUsd(p.costUsd) : '<span style="color:var(--muted)">est. ' + fmtUsd(p.estimatedCostUsd) + '</span>'}</td>
+          <td>${(p.dependsOn || []).map((id) => phaseId(id)).join(', ') || '—'}</td>
+          <td><div class="criteria-dots">${dots}</div></td>
+          <td>${p.completedDate ?? '—'}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  document.getElementById('daily-log').innerHTML = (d.dailyLog || [])
+    .slice()
+    .reverse()
+    .map(
+      (l) => `
+      <div class="daily-log-entry">
+        <div class="date">${l.date ?? ''}</div>
+        <div class="phase">${l.phase ?? ''}</div>
+        <div>${l.notes ?? ''} ${l.hoursSpent ? '· ' + l.hoursSpent + 'h' : ''}</div>
+      </div>
+    `
+    )
+    .join('') || '<p style="color:var(--muted)">Sem entradas ainda.</p>';
+
+  document.getElementById('notes-grid').innerHTML = completedPhases
+    .filter((p) => (p.notes || []).length > 0)
+    .map(
+      (p) => `
+      <div class="notes-card">
+        <div class="phase-name">${phaseId(p.id)} — ${p.name}</div>
+        <ul>${p.notes.map((n) => `<li>${n}</li>`).join('')}</ul>
+      </div>
+    `
+    )
+    .join('') || '<p style="color:var(--muted)">Sem notas técnicas registradas ainda.</p>';
+}
+
+load().then(render);
+</script>
+</body>
+</html>

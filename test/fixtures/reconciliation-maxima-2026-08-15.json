@@ -1,0 +1,102 @@
+{
+  "referenceDate": "2026-08-15",
+  "brand": "maxima",
+  "platform": [
+    { "side": "PLATFORM", "flow": "DEPOSIT", "key": "p-dep-happy", "amountCents": 100000, "core": true, "externalKey": "EK-DEP-HAPPY" },
+    { "side": "PLATFORM", "flow": "WITHDRAWAL", "key": "p-wd-happy", "amountCents": 80000, "core": true, "externalKey": "EK-WD-HAPPY" },
+    { "side": "PLATFORM", "flow": "DEPOSIT", "key": "p-dup-a", "amountCents": 20000, "core": true, "externalKey": "EK-DUP" },
+    { "side": "PLATFORM", "flow": "DEPOSIT", "key": "p-dup-b", "amountCents": 25000, "core": true, "externalKey": "EK-DUP" },
+    { "side": "PLATFORM", "flow": "DEPOSIT", "key": "p-cross", "amountCents": 15000, "core": false, "externalKey": "EK-CROSS" },
+    { "side": "PLATFORM", "flow": "WITHDRAWAL", "key": "p-both-neighbor", "amountCents": 5000, "core": false, "externalKey": "EK-BOTH-NEIGHBOR" },
+    { "side": "PLATFORM", "flow": "WITHDRAWAL", "key": "p-refund-wd", "amountCents": 100000, "core": true, "externalKey": "EK-REFUND-1" }
+  ],
+  "bank": [
+    { "side": "BANK", "flow": "DEPOSIT", "key": "b-dep-happy", "amountCents": 100000, "core": true, "externalKey": "EK-DEP-HAPPY", "refType": "collection" },
+    { "side": "BANK", "flow": "WITHDRAWAL", "key": "b-wd-happy", "amountCents": 80000, "core": true, "externalKey": "EK-WD-HAPPY", "refType": "payment" },
+    { "side": "BANK", "flow": "DEPOSIT", "key": "b-dup", "amountCents": 20000, "core": true, "externalKey": "EK-DUP", "refType": "collection" },
+    { "side": "BANK", "flow": "DEPOSIT", "key": "b-cross", "amountCents": 15000, "core": true, "externalKey": "EK-CROSS", "refType": "collection" },
+    { "side": "BANK", "flow": "WITHDRAWAL", "key": "b-both-neighbor", "amountCents": 5000, "core": false, "externalKey": "EK-BOTH-NEIGHBOR", "refType": "payment" },
+    { "side": "BANK", "flow": "WITHDRAWAL", "key": "b-wd-nokey", "amountCents": 50000, "core": true, "refType": "payment" },
+    { "side": "BANK", "flow": "TREASURY", "key": "b-treasury", "amountCents": 999999, "core": true, "refType": "payment", "counterpartyTaxNumber": "56183358000151" },
+    { "side": "BANK", "flow": "WITHDRAWAL", "key": "b-refund-debit", "amountCents": 100000, "core": true, "externalKey": "EK-REFUND-1", "refType": "payment" },
+    { "side": "BANK", "flow": "DEPOSIT", "key": "b-refund-credit", "amountCents": 100000, "core": true, "externalKey": "EK-REFUND-1", "refType": "payment_refund" },
+    { "side": "BANK", "flow": "WITHDRAWAL", "key": "b-refund2-debit", "amountCents": 40000, "core": true, "externalKey": "EK-REFUND-2", "refType": "payment" },
+    { "side": "BANK", "flow": "DEPOSIT", "key": "b-refund2-credit", "amountCents": 40000, "core": true, "externalKey": "EK-REFUND-2", "refType": "payment_refund" },
+    { "side": "BANK", "flow": "DEPOSIT", "key": "b-refund-nokey", "amountCents": 30000, "core": true, "refType": "payment_refund" }
+  ],
+  "corrections": {
+    "exactSameBrand": {
+      "target": { "brand": "maxima", "amountCents": 75000 },
+      "entries": [
+        { "correctionId": "C-1", "brand": "maxima", "clientId": "CLIENT-1", "correctionDate": "2026-08-10", "occurredAt": null, "amountCents": 75000 }
+      ]
+    },
+    "sum": {
+      "target": { "brand": "maxima", "amountCents": 9000 },
+      "entries": [
+        { "correctionId": "C-2", "brand": "maxima", "clientId": "CLIENT-2", "correctionDate": "2026-08-09", "occurredAt": null, "amountCents": 3200 },
+        { "correctionId": "C-3", "brand": "maxima", "clientId": "CLIENT-2", "correctionDate": "2026-08-09", "occurredAt": null, "amountCents": 5800 }
+      ]
+    },
+    "combinationCutoff": {
+      "target": { "brand": "maxima", "amountCents": 15000 },
+      "entries": [
+        { "correctionId": "C-CUT-1", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-2", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-3", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-4", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-5", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-6", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-7", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-8", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-9", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-10", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-11", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-12", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 },
+        { "correctionId": "C-CUT-13", "brand": "maxima", "clientId": "CLIENT-9", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 5000 }
+      ]
+    },
+    "partial": {
+      "target": { "brand": "maxima", "amountCents": 2500 },
+      "entries": [
+        { "correctionId": "C-P1", "brand": "maxima", "clientId": "CLIENT-3", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 1509 },
+        { "correctionId": "C-P2", "brand": "maxima", "clientId": "CLIENT-3", "correctionDate": "2026-08-08", "occurredAt": null, "amountCents": 900 }
+      ]
+    }
+  },
+  "expected": {
+    "deposits": {
+      "matchedCount": 3,
+      "crossEdge": { "count": 1, "total": 150.0 },
+      "duplicateKeys": 1,
+      "withoutKey": 1,
+      "pendingKeys": ["p-dup-b", "b-refund-nokey"],
+      "bankTotal": 1650.0,
+      "bankCount": 4,
+      "platformTotal": 1450.0,
+      "platformCount": 3
+    },
+    "withdrawals": {
+      "matchedCount": 1,
+      "crossEdge": { "count": 0, "total": 0 },
+      "duplicateKeys": 0,
+      "withoutKey": 1,
+      "pendingKeys": ["b-wd-nokey"],
+      "bankTotal": 1300.0,
+      "bankCount": 2,
+      "platformTotal": 800.0,
+      "platformCount": 1
+    },
+    "treasury": {
+      "total": 9999.99,
+      "count": 1
+    },
+    "refundSettlement": {
+      "settledCount": 2,
+      "settledTotal": 1400.0,
+      "remainingPlatformCount": 6,
+      "remainingBankCount": 8,
+      "reprocessPending": { "EK-REFUND-1": true, "EK-REFUND-2": false }
+    }
+  }
+}
