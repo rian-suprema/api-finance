@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-01T13:32:14.284Z"
+    "lastUpdated": "2026-09-01T13:58:57.104Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 5,
+    "completed": 6,
     "inProgress": 0,
-    "pending": 12,
+    "pending": 11,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 14,
-    "hoursRemaining": 58,
-    "percentComplete": 29.41,
-    "totalCostUsd": 30.18,
-    "projectedTotalCostUsd": 159.77
+    "hoursCompleted": 19,
+    "hoursRemaining": 53,
+    "percentComplete": 35.29,
+    "totalCostUsd": 37.29,
+    "projectedTotalCostUsd": 139.93
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 752,
-    "totalOutputTokens": 303514,
-    "totalCacheWriteTokens": 1139137,
-    "totalCacheReadTokens": 71164310,
-    "totalCostUsd": 30.18,
-    "projectedTotalCostUsd": 159.77,
-    "costCalibrationFactor": 0.2067,
+    "totalInputTokens": 906,
+    "totalOutputTokens": 373564,
+    "totalCacheWriteTokens": 1278266,
+    "totalCacheReadTokens": 89639607,
+    "totalCostUsd": 37.29,
+    "projectedTotalCostUsd": 139.93,
+    "costCalibrationFactor": 0.181,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -85,10 +85,10 @@
         "cacheRead": 44168013
       },
       "14ab5c13-8ab4-4559-a7a1-4d55afc7907d": {
-        "input": 132,
-        "output": 36519,
-        "cacheWrite": 131449,
-        "cacheRead": 7549921
+        "input": 286,
+        "output": 106569,
+        "cacheWrite": 270578,
+        "cacheRead": 26025218
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -280,23 +280,29 @@
     {
       "id": 6,
       "name": "Integração Trio — client + adapter point-in-time",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 5,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-01",
+      "completedDate": "2026-09-01",
       "dependsOn": [
         3
       ],
       "description": "trio-banking.client.ts (varredura por bisseção, retry) + trio-point-in-time-balance.source.ts + port; PARADA HUMANA para confirmar TRIO_AMOUNT_DIVISOR",
-      "notes": [],
+      "notes": [
+        "PARADA HUMANA resolvida: TRIO_AMOUNT_DIVISOR confirmado pelo usuário como 100 (centavos), alinhado com a documentação do cliente Trio. Registrado em INFRA-FINANCE.md §4.2 e REGRAS-NEGOCIO-ROTAS.md; .env/.env.example locais atualizados para 100 (o Secret/ConfigMap real de homologação/produção está fora do alcance desta sessão).",
+        "accountIdFor() adaptado para ler direto de trioConfig.accountIds ({suprema,ultra,maxima}) em vez do catálogo BRANDS da origem (só existe a partir da Fase 07) — mesmo padrão provisório já registrado nas Fases 01/02 para BrandKey.",
+        "BrandKey importado de cash-balance.types.ts (já existe desde a Fase 02) em vez de redeclarado localmente, como o texto do FASE-06.md sugeria — evita duplicação de tipo provisório.",
+        "Teste de orçamento de requisições (REQUEST_BUDGET=20.000) precisou de um mock de has_more condicionado ao tamanho real da janela (via comparação lexicográfica dos timestamps ISO, que reflete ordem cronológica pelo formato de largura fixa) — um mock 'sempre true' incondicional nunca ultrapassa o orçamento nesta bisseção por pilha (LIFO): a descida é sempre pelo galho mais à esquerda até start===end, atingindo o erro de 'janela indivisível' em poucas iterações (profundidade log2), nunca o teto de requisições.",
+        "eslint @typescript-eslint/unbound-method disparou em `expect(mockedAxios.create)` (acesso a método de objeto sem chamar) — resolvido com `jest.spyOn(axios, 'create')` em vez de acessar a propriedade diretamente."
+      ],
       "criteria": {
         "total": 14,
-        "passed": 0
+        "passed": 14
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 70050,
+      "costUsd": 7.1155,
       "estimatedCostUsd": 60,
       "files": [
         "src/modules/finance-cash-balance/infrastructure/trio/trio-banking.client.ts",

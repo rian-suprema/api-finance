@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 06 — Integração Trio.**
+**Fase atual: 07 — Persistência do Balanço de Caixa.**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -51,7 +51,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 03 | Esqueleto não-funcional + allowlist + contrato de erro | ✅ concluída |
 | 04 | Schema TypeORM — 8 entidades + migration inicial | ✅ concluída |
 | 05 | Integração ClickHouse — conexão global | ✅ concluída |
-| 06 | Integração Trio — client + adapter point-in-time | pending |
+| 06 | Integração Trio — client + adapter point-in-time | ✅ concluída |
 | 07 | Persistência do Balanço de Caixa (repositórios + read-service) | pending |
 | 08 | Identidade da plataforma (/auth/me) + BrandAccessService | pending |
 | 09 | Balanço de Caixa — use-cases + services + controller | pending |
@@ -84,8 +84,10 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
    LEVEL SECURITY` ativo, toda leitura/escrita sem o GUC setado — inclusive as 14 rotas HTTP, que não
    usam GUC nenhum — passaria a ver zero linhas. A defesa em profundidade do caminho job (jobs/CLIs
    sem guard nenhum hoje) é uma asserção de aplicação (`assertKnownBrand`), não RLS — ver Fase 15.
-6. **`TRIO_AMOUNT_DIVISOR`** (1 ou 100 — centavos vs reais) é ambíguo na documentação de origem e
-   **não pode ser resolvido por leitura de código** — é PARADA HUMANA na Fase 06.
+6. **`TRIO_AMOUNT_DIVISOR` = 100 (centavos)** — ✅ confirmado pelo usuário na PARADA HUMANA da Fase 06
+   (2026-09-01), alinhado com a documentação do cliente Trio. Registrado em `INFRA-FINANCE.md` §4.2 e
+   `REGRAS-NEGOCIO-ROTAS.md`. `.env`/`.env.example` locais atualizados; o Secret/ConfigMap real de
+   homologação/produção está fora do alcance desta sessão.
 7. **Fail-fast em tudo, sem exceção — convenção consolidada na Fase 03:** nenhuma das 14 variáveis
    novas do Finance tem default de valor perigoso no Joi. Em particular `TRIO_AMOUNT_DIVISOR` é
    `.required()` (`Joi.number().valid(1, 100)`), nunca `.default(1)` — mesmo já validado como "ambíguo,
@@ -207,6 +209,26 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   categoria do gotcha `--verbose` da Fase 01 — qualquer script orgânico futuro que precise do
   relatório JSON do Jest deve usar `--outputFile`, nunca capturar stdout diretamente quando o código
   sob teste usa `Logger`/`console`.
+- **Fase 06:** testar o teto `REQUEST_BUDGET` (20.000) da bisseção da Trio exige um mock de
+  `has_more` condicionado ao tamanho real da janela (comparação lexicográfica dos timestamps ISO de
+  largura fixa, que reflete ordem cronológica) — um mock "sempre `true`" incondicional nunca atinge o
+  teto: a varredura usa uma pilha (LIFO), então sempre desce pelo galho mais à esquerda até
+  `start === end`, batendo no erro de "janela indivisível" em poucas iterações (profundidade
+  `log2(tamanho)`), nunca no teto de requisições. Só uma janela onde `has_more` depende do tamanho de
+  cada nó (verdadeiro sempre que o nó > 1) produz exploração ampla o bastante (árvore binária
+  completa) para ultrapassar 20.000 chamadas. Qualquer teste futuro de teto de requisições em
+  bisseção precisa desse padrão, não de um mock incondicional.
+- **Fase 06:** `accountIdFor()`/`BrandKey` adaptados para usar o que já existe no destino em vez do
+  catálogo `BRANDS` da origem (só chega na Fase 07) — `accountIdFor` lê direto de
+  `trioConfig.accountIds`, e `BrandKey` foi importado de `cash-balance.types.ts` (existente desde a
+  Fase 02) em vez de redeclarado localmente, como o texto do `FASE-06.md` sugeria. Mesma categoria do
+  padrão provisório já registrado nas Fases 01/02: preferir o tipo/valor já existente no destino a
+  duplicar.
+- **Fase 06:** `@typescript-eslint/unbound-method` dispara em `expect(objeto.metodo)` sempre que o
+  método é declarado com sintaxe de método (não `propriedade: () => T`) no `.d.ts` da lib — caso de
+  `axios.create`. Extrair para uma `const` antes do `expect` não resolve (a regra ainda vê a leitura
+  desacoplada na atribuição); a correção é `jest.spyOn(objeto, 'metodo')`, que não dispara a regra
+  porque o nome do método é passado como string, não como acesso de propriedade.
 
 ## Convenções de teste
 
