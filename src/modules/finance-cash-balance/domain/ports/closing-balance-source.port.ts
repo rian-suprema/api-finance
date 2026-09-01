@@ -1,4 +1,4 @@
-import type { BrandKey } from '../cash-balance.types';
+import type { BrandKey } from '../../cash-balance.constants';
 
 export const CLOSING_BALANCE_SOURCE = Symbol('CLOSING_BALANCE_SOURCE');
 

@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { brtMidnightUtc, nextDay } from '../../../../common/utils/date.util';
 import { roundCurrency } from '../../../../common/utils/number.util';
-import type { BrandKey } from '../../domain/cash-balance.types';
+import type { BrandKey } from '../../cash-balance.constants';
 import type {
   ClosingBalanceCapture,
   ClosingBalanceSource,

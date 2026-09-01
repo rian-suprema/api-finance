@@ -1,12 +1,4 @@
-/**
- * `BrandKey`/`BankType` são provisórios aqui — o catálogo real
- * (`BRANDS`/`BankType`) só chega em `cash-balance.constants.ts` na Fase 07.
- * Declarar como tipo próprio agora evita dependência cruzada com uma fase
- * futura; trocar pelo import do catálogo quando `cash-balance.constants.ts`
- * existir (decisão registrada em CLAUDE.md — Aprendizados críticos, Fase 02).
- */
-export type BrandKey = string;
-export type BankType = 'API' | 'MANUAL';
+import type { BankType, BrandKey } from '../cash-balance.constants';
 
 export interface BrandAccess {
   brand: BrandKey;

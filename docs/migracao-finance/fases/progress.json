@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-01T13:58:57.104Z"
+    "lastUpdated": "2026-09-01T16:52:12.673Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 6,
+    "completed": 7,
     "inProgress": 0,
-    "pending": 11,
+    "pending": 10,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 19,
-    "hoursRemaining": 53,
-    "percentComplete": 35.29,
-    "totalCostUsd": 37.29,
-    "projectedTotalCostUsd": 139.93
+    "hoursCompleted": 23,
+    "hoursRemaining": 49,
+    "percentComplete": 41.18,
+    "totalCostUsd": 61.13,
+    "projectedTotalCostUsd": 192.09
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 906,
-    "totalOutputTokens": 373564,
-    "totalCacheWriteTokens": 1278266,
-    "totalCacheReadTokens": 89639607,
-    "totalCostUsd": 37.29,
-    "projectedTotalCostUsd": 139.93,
-    "costCalibrationFactor": 0.181,
+    "totalInputTokens": 1228,
+    "totalOutputTokens": 490567,
+    "totalCacheWriteTokens": 1809424,
+    "totalCacheReadTokens": 156606647,
+    "totalCostUsd": 61.13,
+    "projectedTotalCostUsd": 192.09,
+    "costCalibrationFactor": 0.2485,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -85,10 +85,10 @@
         "cacheRead": 44168013
       },
       "14ab5c13-8ab4-4559-a7a1-4d55afc7907d": {
-        "input": 286,
-        "output": 106569,
-        "cacheWrite": 270578,
-        "cacheRead": 26025218
+        "input": 608,
+        "output": 223572,
+        "cacheWrite": 801736,
+        "cacheRead": 92992258
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -314,27 +314,37 @@
     {
       "id": 7,
       "name": "Persistência do Balanço de Caixa (repositórios + read-service)",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 4,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-01",
+      "completedDate": "2026-09-01",
       "dependsOn": [
         4,
         5
       ],
       "description": "cash-balance.repository.ts, trio-closing-balance.repository.ts, clickhouse-read.service.ts — TypeORM (Repository/QueryBuilder), transações do registerBrand",
-      "notes": [],
+      "notes": [
+        "cash-balance.repository.ts original ficou com 701 linhas (>400, limite do ESLint max-lines) — dividido em 3 arquivos: cash-balance.repository.ts (API pública da classe), cash-balance.repository-reads.ts (leituras puras, funções livres) e cash-balance.repository-upserts.ts (upserts elementares, funções livres com EntityManager como parâmetro); tipos movidos para cash-balance.repository.types.ts e reexportados por repository.ts para não mudar a superfície pública.",
+        "trioAccountEnvKey não foi portado para BrandConfig/cash-balance.constants.ts: ficaria sem nenhum consumidor real, já que TrioBankingClient.accountIdFor() (Fase 06) já lê trioConfig.accountIds direto pela BrandKey, sem precisar do nome da env.",
+        "BrandKey/BankType centralizados: cash-balance.types.ts parou de declarar type BrandKey = string e passou a importar de cash-balance.constants.ts; os 4 consumidores (kpi-card.util.ts, closing-balance-source.port.ts, trio-banking.client.ts, trio-point-in-time-balance.source.ts — só os 2 primeiros estavam explícitos no FASE-07.md, os outros 2 tinham o mesmo problema) foram todos ajustados para importar direto de cash-balance.constants.ts.",
+        "Confirmado empiricamente contra Postgres real (não suposição): colunas `date` do TypeORM/pg voltam como string 'YYYY-MM-DD', não Date — diferente da origem em Prisma, que exigia toDateOnly/fromDateOnly em toda borda. A data trafega como string do início ao fim no repositório novo, sem conversão.",
+        "Teste do teto de queries de findLastKnownBalances (2 marcas vs 3 marcas) precisa de dado prévio real para cada marca — sem isso, o early-return de pairs.length===0 faria as duas contagens darem 1 (não 2), mascarando uma regressão real (uma query por marca) atrás de um resultado igualmente '1' para as duas comparações.",
+        "Processo: a implementação foi escrita antes do script de teste orgânico nesta fase (falha do processo RED-antes-da-implementação). Corrigido com o mesmo teste decisivo da Fase 05: mover os arquivos novos para fora do repositório, reexecutar o script confirmando falha real (exit 3), restaurar e reconfirmar GREEN — RED genuíno e verificável, embora fora de ordem."
+      ],
       "criteria": {
         "total": 14,
-        "passed": 0
+        "passed": 14
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 117003,
+      "costUsd": 23.838,
       "estimatedCostUsd": 40,
       "files": [
         "src/modules/finance-cash-balance/infrastructure/cash-balance.repository.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository.types.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository-reads.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository-upserts.ts",
         "src/modules/finance-cash-balance/infrastructure/trio-closing-balance.repository.ts",
         "src/modules/finance-cash-balance/infrastructure/clickhouse/clickhouse-read.service.ts",
         "src/modules/finance-cash-balance/cash-balance.constants.ts"

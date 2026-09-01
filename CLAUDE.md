@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 07 — Persistência do Balanço de Caixa.**
+**Fase atual: 08 — Identidade da plataforma.**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -52,7 +52,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 04 | Schema TypeORM — 8 entidades + migration inicial | ✅ concluída |
 | 05 | Integração ClickHouse — conexão global | ✅ concluída |
 | 06 | Integração Trio — client + adapter point-in-time | ✅ concluída |
-| 07 | Persistência do Balanço de Caixa (repositórios + read-service) | pending |
+| 07 | Persistência do Balanço de Caixa (repositórios + read-service) | ✅ concluída |
 | 08 | Identidade da plataforma (/auth/me) + BrandAccessService | pending |
 | 09 | Balanço de Caixa — use-cases + services + controller | pending |
 | 10 | Persistência da Conciliação (repositório) | pending |
@@ -229,6 +229,31 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   `axios.create`. Extrair para uma `const` antes do `expect` não resolve (a regra ainda vê a leitura
   desacoplada na atribuição); a correção é `jest.spyOn(objeto, 'metodo')`, que não dispara a regra
   porque o nome do método é passado como string, não como acesso de propriedade.
+- **Fase 07:** confirmado empiricamente contra Postgres real (script descartável, não suposição):
+  coluna `type: 'date'` do TypeORM/`pg` volta como `string` `'YYYY-MM-DD'`, nunca `Date` — diferente
+  da origem em Prisma, que exigia `toDateOnly`/`fromDateOnly` em toda borda. `reference_date` trafega
+  como string do início ao fim em `cash-balance.repository.ts`, sem conversão. Vale para qualquer
+  coluna `date` nova nas fases seguintes.
+- **Fase 07:** `cash-balance.repository.ts` bateu no `max-lines` (400) do ESLint com os 13 métodos
+  literais da origem — dividido em 3 arquivos por responsabilidade, não por tamanho arbitrário:
+  `cash-balance.repository.ts` (API pública da classe, injetável), `cash-balance.repository-reads.ts`
+  (leituras puras, funções livres recebendo `DataSource`), `cash-balance.repository-upserts.ts`
+  (upserts elementares, funções livres recebendo o `EntityManager` transacional). Precedente para
+  qualquer repositório novo que se aproxime do limite: extrair por responsabilidade (leitura/escrita
+  elementar) antes de simplesmente cortar comentários.
+- **Fase 07:** `trioAccountEnvKey` do `BrandConfig` da origem não foi portado — ficaria sem nenhum
+  consumidor real, já que `TrioBankingClient.accountIdFor()` (Fase 06) já lê `trioConfig.accountIds`
+  direto pela própria `BrandKey`, sem precisar do nome da variável de ambiente.
+- **Fase 07:** o texto do `FASE-07.md` citava só 2 arquivos (`closing-balance-source.port.ts`,
+  `kpi-card.util.ts`) para ajustar o import provisório de `BrandKey` — na prática eram 4 (os outros 2,
+  `trio-banking.client.ts` e `trio-point-in-time-balance.source.ts`, da Fase 06, tinham o mesmo
+  problema). Mesma categoria de omissão de prosa já vista nas Fases 03/04: quando o `FASE-*.md` lista
+  uma correção, verificar por `grep` todos os sites reais antes de assumir que a lista está completa.
+- **Fase 07:** processo — a implementação desta fase foi escrita antes do script de teste orgânico
+  (falha do processo RED-antes-da-implementação, mesma categoria da Fase 05). Corrigido com o mesmo
+  teste decisivo: mover os arquivos novos para fora do repositório, reexecutar o script confirmando
+  falha real, restaurar e reconfirmar GREEN. RED genuíno e verificável, embora fora de ordem — mas o
+  objetivo é não repetir a inversão de ordem numa fase futura, não só saber corrigi-la depois.
 
 ## Convenções de teste
 

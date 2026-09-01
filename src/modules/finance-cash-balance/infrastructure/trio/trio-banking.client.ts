@@ -3,7 +3,7 @@ import { ConfigType } from '@nestjs/config';
 import axios, { type AxiosInstance } from 'axios';
 
 import { trioConfig } from '../../../../config/configuration';
-import type { BrandKey } from '../../domain/cash-balance.types';
+import type { BrandKey } from '../../cash-balance.constants';
 
 /**
  * Cliente da banking-api da Trio (https://docs.trio.com.br).
@@ -156,7 +156,7 @@ export class TrioBankingClient {
   }
 
   accountIdFor(brand: BrandKey): string | undefined {
-    return this.accountIds[brand as keyof typeof this.accountIds];
+    return this.accountIds[brand];
   }
 
   /**

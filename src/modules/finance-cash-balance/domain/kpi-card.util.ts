@@ -3,13 +3,13 @@
  * use-cases de leitura para os dois cards da tela do dia e do histórico
  * saírem com o mesmo formato e a mesma ordem de marcas.
  *
- * `label` ainda não vem do catálogo `BRANDS` (só existe a partir da Fase 07,
- * `cash-balance.constants.ts`) — por ora usa a própria chave da marca como
- * label, para não criar dependência cruzada com uma fase futura. Trocar por
- * `BRANDS.find(...).label` quando o catálogo existir.
+ * `label` ainda usa a própria chave da marca (não `BRANDS.find(...).label`,
+ * já disponível desde a Fase 07) — nenhum use-case desta trilha até agora
+ * consome o label real; trocar quando o primeiro consumidor precisar.
  */
 import { roundCurrency } from '../../../common/utils/number.util';
-import type { BrandAmount, BrandKey, KpiCard } from './cash-balance.types';
+import type { BrandKey } from '../cash-balance.constants';
+import type { BrandAmount, KpiCard } from './cash-balance.types';
 
 export function buildKpiCard(brands: BrandKey[], amounts: Map<BrandKey, number>): KpiCard {
   const byBrand: BrandAmount[] = brands.map((brand) => ({
