@@ -74,9 +74,55 @@ describe('Arquitetura do archetype (variante simples)', () => {
     );
   });
 
+  // ADR-FINANCE-3: `haveNoCycles()` do ArchUnitTS não distingue import de TIPO
+  // de import de VALOR — um ciclo de arquivo aparece mesmo quando um dos dois
+  // lados usa `import type` (que não gera dependência em tempo de execução).
+  // O TypeORM exige relação bidirecional real (@OneToMany + @ManyToOne) entre
+  // CashBalanceDay↔CashBalanceDaily e ReconciliationRun↔ReconciliationItem
+  // (DADOS-FINANCE.md §3.1/§3.2 e §4.1/§4.2) — cada par referencia a classe do
+  // outro por construção. As duas pastas de entities/ do Finance saem do
+  // escopo desta regra geral; a regra seguinte garante, dentro delas, que o
+  // lado "pai" nunca importa a classe "filha" como valor (só como tipo) — ou
+  // seja, que o ciclo real (de valor) continua inexistente.
   it('não há ciclos de dependência', async () => {
-    const rule = projectFiles().inFolder('src/**').should().haveNoCycles();
+    const rule = projectFiles()
+      .inFolder('src/**', {
+        except: {
+          inFolder: [
+            'src/modules/finance-cash-balance/entities/**',
+            'src/modules/finance-reconciliation/entities/**',
+          ],
+        },
+      })
+      .should()
+      .haveNoCycles();
     await expect(rule).toPassAsync();
+  });
+
+  it('CashBalanceDay só importa CashBalanceDaily como tipo (evita reintroduzir o ciclo real)', async () => {
+    const violations = await projectFiles()
+      .inFolder('src/modules/finance-cash-balance/entities/**')
+      .inFile('src/modules/finance-cash-balance/entities/cash-balance-day.entity.ts')
+      .should()
+      .adhereTo(
+        (file) => /import type \{[^}]*\bCashBalanceDaily\b/.test(file.content),
+        "cash-balance-day.entity.ts deve importar CashBalanceDaily só como 'import type'",
+      )
+      .check();
+    expect(violations).toStrictEqual([]);
+  });
+
+  it('ReconciliationRun só importa ReconciliationItem como tipo (evita reintroduzir o ciclo real)', async () => {
+    const violations = await projectFiles()
+      .inFolder('src/modules/finance-reconciliation/entities/**')
+      .inFile('src/modules/finance-reconciliation/entities/reconciliation-run.entity.ts')
+      .should()
+      .adhereTo(
+        (file) => /import type \{[^}]*\bReconciliationItem\b/.test(file.content),
+        "reconciliation-run.entity.ts deve importar ReconciliationItem só como 'import type'",
+      )
+      .check();
+    expect(violations).toStrictEqual([]);
   });
 
   // Organização NestJS: entity em entities/, DTO em dto/ — pelo nome certo.

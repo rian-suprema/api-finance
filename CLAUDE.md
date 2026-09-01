@@ -42,14 +42,14 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 04 — Schema TypeORM.**
+**Fase atual: 05 — Integração ClickHouse.**
 
 | Fase | Nome | Status |
 |---|---|---|
 | 01 | Domínio puro — Conciliação + golden dataset | ✅ concluída |
 | 02 | Domínio puro — Balanço de Caixa | ✅ concluída |
 | 03 | Esqueleto não-funcional + allowlist + contrato de erro | ✅ concluída |
-| 04 | Schema TypeORM — 8 entidades + migration inicial | pending |
+| 04 | Schema TypeORM — 8 entidades + migration inicial | ✅ concluída |
 | 05 | Integração ClickHouse — conexão global | pending |
 | 06 | Integração Trio — client + adapter point-in-time | pending |
 | 07 | Persistência do Balanço de Caixa (repositórios + read-service) | pending |
@@ -92,6 +92,22 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
    PARADA HUMANA" no item 6, o boot cai sem ela em vez de assumir silenciosamente. Vale para toda
    variável nova das Fases 04–17: default só quando o valor for inócuo (ex.: `CLICKHOUSE_DATABASE`),
    nunca quando errar o valor custa 100× o valor real.
+8. **`match_key` padronizado como `snake_case` — convenção consolidada na Fase 04.** A origem tinha
+   `reconciliation_runs."matchKey"` sem `@map` (pegadinha real, `DADOS-FINANCE.md` §2.1); nesta
+   trilha a coluna nasce `match_key` desde o início. Vale como padrão para qualquer coluna nova: nome
+   de coluna é sempre `snake_case` explícito via `name:`, sem excecão "porque a origem fez diferente".
+9. **ADR-FINANCE-3 — `haveNoCycles()` não distingue `import type` de import de valor
+   (`architecture.spec.ts`, Fase 04):** as 2 pastas `entities/` do Finance
+   (`finance-cash-balance/entities/**`, `finance-reconciliation/entities/**`) ficam de fora do escopo
+   da regra geral de ciclos, porque o TypeORM exige relação bidirecional real
+   (`@OneToMany`+`@ManyToOne`) entre `CashBalanceDay↔CashBalanceDaily` e
+   `ReconciliationRun↔ReconciliationItem`, o que sempre cria um ciclo de ARQUIVO (mesmo quando um dos
+   lados importa a classe irmã só como tipo). Duas regras adicionais garantem que o lado "pai" nunca
+   importa a classe "filha" como valor (só `import type`) — o ciclo real de valor continua proibido.
+   Decisão do usuário entre 3 opções (as outras eram remover as relações inversas, ou tipar sem
+   importar a classe irmã). Se um par de entidades novo (Fases 07+) tiver o mesmo padrão bidirecional,
+   este é o precedente a seguir — adicionar a pasta à exclusão + as 2 regras de `import type`, não
+   inventar uma solução nova.
 
 ## Aprendizados críticos
 
@@ -143,6 +159,36 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   portados literalmente de `/home/feh/sayplus-modules/finance` (`finance-api` + `scripts/dev-stubs.js`
   da origem, presentes no disco local) — não havia cópia desses arquivos dentro deste repositório
   antes da Fase 03.
+- **Fase 04:** o script orgânico do próprio `FASE-04.md` tinha um bug de contagem de tabelas —
+  `table_name LIKE '%cash_balance%' OR ... OR table_name = 'finance_audit_logs'` sem parênteses
+  (precedência `AND`/`OR` errada) e o padrão `%cash_balance%` não cobre `trio_closing_balances`,
+  então a contagem real dava 7, nunca 8. Corrigido para uma lista `IN (...)` com os 8 nomes exatos.
+  Mesma categoria de defeito já visto em scripts orgânicos anteriores — o template de um `FASE-*.md`
+  não é confiável sem rodar contra a implementação real.
+- **Fase 04:** não existia `.env` no checkout (só `.env.example`/`.env.test`) — `npm run
+  migration:run` só funciona com `.env` real (`data-source.ts` carrega `.env` quando `NODE_ENV !==
+  'test'`). Criado localmente via `cp .env.example .env` (gitignorado). Qualquer fase futura que
+  precise rodar migration precisa desse `.env` local.
+- **Fase 04:** entidades TypeORM com relação bidirecional real entre arquivos-irmãos colidem com
+  `haveNoCycles()` do `architecture.spec.ts`, porque a regra não distingue `import type` de import de
+  valor. Ver decisão 9 (ADR-FINANCE-3) acima — é o precedente para qualquer par de entidades novo com
+  o mesmo padrão.
+- **Fase 04:** enums de coluna (`CashBalanceDayStatus` etc.) não podem morar dentro de `entities/` —
+  a regra "entities/ só contém `*.entity.ts`" (já existente, não é do Finance) rejeita qualquer outro
+  arquivo ali. Ficam na raiz do módulo (`cash-balance.enums.ts`, `reconciliation.enums.ts`).
+- **Fase 04:** `up()` de uma migration com muitas tabelas bate no limite de 80 linhas por função do
+  ESLint (`max-lines-per-function`) — não há exceção para migrations no `eslint.config.mjs` (só para
+  `*.spec.ts`/`test/**`). Resolvido dividindo `up()` em métodos privados por sub-domínio, mantendo
+  uma migration/classe só (a decisão de "migration única" é sobre o arquivo, não sobre o tamanho da
+  função).
+- **Fase 04:** `sonarjs/todo-tag` deu falso positivo de novo (mesma causa da Fase 03: "todo" como
+  pronome em português, ex. "cada upsert" tinha sido escrito como "todo upsert").
+- **Fase 04:** a seção "Validação no banco" do `FASE-04.md` cita "as 3 FKs" mas o próprio texto de
+  `cash-balance-brand-snapshot.entity.ts` (mesma fase) e `DADOS-FINANCE.md` §3.4 exigem uma 4ª FK
+  (`cash_balance_brand_snapshots.daily_id → cash_balance_daily.id`, 1:1). Implementada como FK real —
+  a contagem "3" no texto de validação é omissão, não decisão de excluir. Mesma categoria do
+  "8 permissões" vs. 7 reais da Fase 03: quando a prosa de um `FASE-*.md` diverge do código
+  explicitamente especificado na mesma fase, o código vale.
 
 ## Convenções de teste
 
