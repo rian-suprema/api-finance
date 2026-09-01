@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 05 — Integração ClickHouse.**
+**Fase atual: 06 — Integração Trio.**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -50,7 +50,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 02 | Domínio puro — Balanço de Caixa | ✅ concluída |
 | 03 | Esqueleto não-funcional + allowlist + contrato de erro | ✅ concluída |
 | 04 | Schema TypeORM — 8 entidades + migration inicial | ✅ concluída |
-| 05 | Integração ClickHouse — conexão global | pending |
+| 05 | Integração ClickHouse — conexão global | ✅ concluída |
 | 06 | Integração Trio — client + adapter point-in-time | pending |
 | 07 | Persistência do Balanço de Caixa (repositórios + read-service) | pending |
 | 08 | Identidade da plataforma (/auth/me) + BrandAccessService | pending |
@@ -189,6 +189,24 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   a contagem "3" no texto de validação é omissão, não decisão de excluir. Mesma categoria do
   "8 permissões" vs. 7 reais da Fase 03: quando a prosa de um `FASE-*.md` diverge do código
   explicitamente especificado na mesma fase, o código vale.
+- **Fase 05:** `stat(1)` (`Birth`) não é evidência confiável de ordem histórica de criação de arquivo
+  nesta sessão — a ferramenta de edição usada aqui grava via temp-file+rename, o que reseta
+  Birth/Change do inode a cada edição subsequente. Um arquivo editado depois de escrito pela primeira
+  vez passa a mostrar `Birth` igual ao horário da ÚLTIMA edição, não da criação original; comparar
+  `Birth` entre dois arquivos com históricos de edição diferentes pode inverter a ordem real dos
+  eventos. Uma verificação adversarial baseada nisso reprovou (incorretamente) o critério "RED antes
+  da implementação" da Fase 05. Resolvido com evidência decisiva e reproduzível: mover a pasta
+  implementada para fora do repositório, reexecutar o script confirmando falha real, restaurar e
+  confirmar sucesso real — não depende de metadado de filesystem. Se uma verificação adversarial
+  futura citar timestamp de arquivo como prova de ordem, preferir esse tipo de teste decisivo a
+  confiar em `stat`.
+- **Fase 05:** Jest 30 com Nest `Logger` ativo contamina `--json` no stdout — o `Logger.warn`/`error`
+  do NestJS escreve no mesmo stdout que o `--json` do Jest, produzindo um blob não-parseável por
+  `jq` mesmo redirecionando stderr. Correção: `--json --outputFile=<tmp>` (grava o relatório limpo em
+  arquivo, ignora o que for escrito em stdout) em vez de capturar `--json` da saída padrão. Mesma
+  categoria do gotcha `--verbose` da Fase 01 — qualquer script orgânico futuro que precise do
+  relatório JSON do Jest deve usar `--outputFile`, nunca capturar stdout diretamente quando o código
+  sob teste usa `Logger`/`console`.
 
 ## Convenções de teste
 

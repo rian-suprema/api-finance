@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-01T01:10:46.945Z"
+    "lastUpdated": "2026-09-01T13:32:14.284Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 4,
+    "completed": 5,
     "inProgress": 0,
-    "pending": 13,
+    "pending": 12,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 11,
-    "hoursRemaining": 61,
-    "percentComplete": 23.5,
-    "totalCostUsd": 26.87,
-    "projectedTotalCostUsd": 188.82
+    "hoursCompleted": 14,
+    "hoursRemaining": 58,
+    "percentComplete": 29.41,
+    "totalCostUsd": 30.18,
+    "projectedTotalCostUsd": 159.77
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 620,
-    "totalOutputTokens": 266995,
-    "totalCacheWriteTokens": 1007688,
-    "totalCacheReadTokens": 63614389,
-    "totalCostUsd": 26.87,
-    "projectedTotalCostUsd": 188.82,
-    "costCalibrationFactor": 0.2443,
+    "totalInputTokens": 752,
+    "totalOutputTokens": 303514,
+    "totalCacheWriteTokens": 1139137,
+    "totalCacheReadTokens": 71164310,
+    "totalCostUsd": 30.18,
+    "projectedTotalCostUsd": 159.77,
+    "costCalibrationFactor": 0.2067,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -83,6 +83,12 @@
         "output": 155629,
         "cacheWrite": 784973,
         "cacheRead": 44168013
+      },
+      "14ab5c13-8ab4-4559-a7a1-4d55afc7907d": {
+        "input": 132,
+        "output": 36519,
+        "cacheWrite": 131449,
+        "cacheRead": 7549921
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -245,23 +251,25 @@
     {
       "id": 5,
       "name": "Integração ClickHouse — conexão global",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 3,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-01",
+      "completedDate": "2026-09-01",
       "dependsOn": [
         3
       ],
       "description": "src/clickhouse/ (módulo global, ClickHouseService com query_params nomeados, nunca string interpolada)",
-      "notes": [],
+      "notes": [
+        "Verificação adversarial inicial reprovou o critério RED-antes-da-implementação com base em Birth time de stat(1) dos arquivos — falso positivo: a ferramenta de edição desta sessão grava via temp-file+rename, o que reseta Birth/Change do inode a cada edição, então um arquivo editado depois de criado mostra Birth igual ao horário da ÚLTIMA edição, não da criação original. Resolvido com teste decisivo: mv src/clickhouse/ para fora do disco, reexecução do script confirmando RED real (exit 2, 2/4), restauração confirmando GREEN (4/4). Segunda verificação adversarial, independente, reproduziu o teste e CONFIRMOU."
+      ],
       "criteria": {
         "total": 13,
-        "passed": 0
+        "passed": 13
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 36519,
+      "costUsd": 3.3061,
       "estimatedCostUsd": 36,
       "files": [
         "src/clickhouse/clickhouse.module.ts",

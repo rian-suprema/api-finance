@@ -33,6 +33,7 @@
     "auth:token": "node scripts/auth-dev-token.js"
   },
   "dependencies": {
+    "@clickhouse/client": "1.23.1",
     "@nestjs/common": "^11.1.0",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.0",

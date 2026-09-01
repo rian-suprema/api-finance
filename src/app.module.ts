@@ -4,6 +4,7 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 
 import { AuthModule } from './auth/auth.module';
+import { ClickHouseModule } from './clickhouse/clickhouse.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
@@ -59,6 +60,7 @@ import { UsersModule } from './modules/users/users.module';
     // AuthModule registra os guards GLOBAIS (JWT → permissões, deny-by-default):
     // consumo da auth da plataforma SayPlus — o módulo valida, nunca emite.
     AuthModule,
+    ClickHouseModule,
     DatabaseModule,
     HealthModule,
     // Módulos de negócio
