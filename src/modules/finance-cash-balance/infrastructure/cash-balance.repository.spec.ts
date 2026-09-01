@@ -9,6 +9,7 @@ import { CashBalanceDay } from '../entities/cash-balance-day.entity';
 import { TrioClosingBalance } from '../entities/trio-closing-balance.entity';
 import { FinanceAuditLog } from '../entities/finance-audit-log.entity';
 import { CashBalanceRepository, type RegisterBrandParams } from './cash-balance.repository';
+import { lockBankEntries } from './cash-balance.repository-upserts';
 
 jest.setTimeout(120_000);
 
@@ -29,15 +30,20 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
     tenantId: 'tenant-suprema',
     userId: 'operador-1',
     trioBalance: 1000,
-    manualBalances: new Map([['caixa', 500]]),
     saldoJogadores: 300,
-    saldoTransacional: 1500,
-    totalBalanco: 1200,
     depositsTotal: 800,
     withdrawalsTotal: 200,
     requiredBrands: 3,
     ...overrides,
   });
+
+  /** Ignora as linhas travadas e devolve um mapa fixo — suficiente para os
+   *  testes que não exercitam a extração em si (essa é responsabilidade do
+   *  use-case, Fase 09; aqui testamos o repositório). */
+  const buildResolveManualBalances =
+    (map: Map<string, number> = new Map([['caixa', 500]])) =>
+    () =>
+      map;
 
   beforeAll(async () => {
     postgres = await new PostgreSqlContainer('postgres:16-alpine').start();
@@ -78,16 +84,17 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
 
   describe('registerBrand', () => {
     it('é atômico: falha no meio da transação não deixa nenhuma linha gravada (rollback completo)', async () => {
-      const params = buildRegisterParams({
-        manualBalances: new Map([
+      const params = buildRegisterParams();
+      const resolveManualBalances = buildResolveManualBalances(
+        new Map([
           ['caixa', 500],
           // Nome de banco > 50 caracteres viola o varchar(50) da coluna —
           // constraint real do Postgres, não um mock de falha.
           ['x'.repeat(60), 100],
         ]),
-      });
+      );
 
-      await expect(repository.registerBrand(params)).rejects.toThrow();
+      await expect(repository.registerBrand(params, resolveManualBalances)).rejects.toThrow();
 
       const days = await dataSource.query<unknown[]>('SELECT * FROM cash_balance_days');
       const dailies = await dataSource.query<unknown[]>('SELECT * FROM cash_balance_daily');
@@ -99,10 +106,16 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
     });
 
     it('fecha o dia só quando as 3 marcas estão confirmadas', async () => {
-      const first = await repository.registerBrand(buildRegisterParams({ brand: 'suprema' }));
+      const first = await repository.registerBrand(
+        buildRegisterParams({ brand: 'suprema' }),
+        buildResolveManualBalances(),
+      );
       expect(first.dayClosed).toBe(false);
 
-      const second = await repository.registerBrand(buildRegisterParams({ brand: 'ultra' }));
+      const second = await repository.registerBrand(
+        buildRegisterParams({ brand: 'ultra' }),
+        buildResolveManualBalances(),
+      );
       expect(second.dayClosed).toBe(false);
 
       const day = await dataSource.query<StatusRow[]>(
@@ -110,7 +123,10 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
       );
       expect(day[0].status).toBe('OPEN');
 
-      const third = await repository.registerBrand(buildRegisterParams({ brand: 'maxima' }));
+      const third = await repository.registerBrand(
+        buildRegisterParams({ brand: 'maxima' }),
+        buildResolveManualBalances(),
+      );
       expect(third.dayClosed).toBe(true);
 
       const closedDay = await dataSource.query<StatusRow[]>(
@@ -118,19 +134,95 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
       );
       expect(closedDay[0].status).toBe('CLOSED');
     });
+
+    it('SELECT ... FOR UPDATE em cash_balance_bank_entries bloqueia uma escrita concorrente até o commit — prova decisiva, não coincidência de timing', async () => {
+      // Prova em 2 partes:
+      // (1) estrutural — já confirmado por leitura de código: registerBrand
+      //     chama lockBankEntries ANTES do callback e de qualquer upsert.
+      // (2) decisiva — este teste — a MESMA função lockBankEntries usada por
+      //     registerBrand bloqueia de verdade uma escrita concorrente na
+      //     mesma linha, até o commit/rollback da transação que a travou.
+      //     Controle explícito de transação (QueryRunner), não Promise.all:
+      //     um Promise.all entre chamadas de repositório inteiras não prova
+      //     nada por si — a primeira verificação (removendo o .setLock e
+      //     rodando 5x) mostrou o teste anterior passando igual sem o lock,
+      //     pura coincidência de agendamento do Node/driver.
+      const referenceDate = '2026-08-16';
+      const brand = 'suprema' as const;
+
+      await repository.confirmBank({
+        referenceDate,
+        brand,
+        tenantId: 'tenant-suprema',
+        bank: 'caixa',
+        balance: 500,
+        userId: 'operador-1',
+      });
+
+      const [{ id: dailyId }] = await dataSource.query<{ id: number }[]>(
+        `SELECT id FROM cash_balance_daily WHERE reference_date = $1 AND brand = $2`,
+        [referenceDate, brand],
+      );
+
+      const queryRunner = dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      // Mesma trava que registerBrand usa (lockBankEntries), com transação
+      // mantida ABERTA de propósito para testar o bloqueio.
+      await lockBankEntries(queryRunner.manager, dailyId);
+
+      let confirmCompleted = false;
+      const confirmPromise = repository
+        .confirmBank({
+          referenceDate,
+          brand,
+          tenantId: 'tenant-suprema',
+          bank: 'caixa',
+          balance: 999,
+          userId: 'operador-2',
+        })
+        .then(() => {
+          confirmCompleted = true;
+        });
+
+      // Enquanto a transação que travou a linha está aberta, a confirmação
+      // concorrente NÃO PODE ter terminado — se terminasse, o lock é inerte.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(confirmCompleted).toBe(false);
+
+      await queryRunner.commitTransaction();
+      await queryRunner.release();
+
+      await confirmPromise;
+      expect(confirmCompleted).toBe(true);
+
+      const [{ balance }] = await dataSource.query<{ balance: string }[]>(
+        `SELECT balance FROM cash_balance_bank_entries WHERE daily_id = $1 AND bank = 'caixa'`,
+        [dailyId],
+      );
+      expect(Number(balance)).toBe(999);
+    });
   });
 
   describe('recomputeMonthlyAccumulated', () => {
     it('é soma corrente em ordem de data — dia inserido fora de ordem não conta dias posteriores', async () => {
+      // totalBalanco = trioBalance - saldoJogadores (manual vazio, jogadores
+      // zerado) — forma direta de controlar o total sem depender de soma manual.
+      const noManualBalances = buildResolveManualBalances(new Map());
+
       // Inserção deliberadamente fora de ordem cronológica: dia 20, depois 05, depois 10.
       await repository.registerBrand(
-        buildRegisterParams({ referenceDate: '2026-08-20', totalBalanco: 100 }),
+        buildRegisterParams({ referenceDate: '2026-08-20', trioBalance: 100, saldoJogadores: 0 }),
+        noManualBalances,
       );
       await repository.registerBrand(
-        buildRegisterParams({ referenceDate: '2026-08-05', totalBalanco: 50 }),
+        buildRegisterParams({ referenceDate: '2026-08-05', trioBalance: 50, saldoJogadores: 0 }),
+        noManualBalances,
       );
       await repository.registerBrand(
-        buildRegisterParams({ referenceDate: '2026-08-10', totalBalanco: 30 }),
+        buildRegisterParams({ referenceDate: '2026-08-10', trioBalance: 30, saldoJogadores: 0 }),
+        noManualBalances,
       );
 
       await repository.recomputeMonthlyAccumulated('2026-08-15');
@@ -151,12 +243,15 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
     it('usa exatamente 2 queries, nunca uma por marca', async () => {
       await repository.registerBrand(
         buildRegisterParams({ referenceDate: '2026-08-10', brand: 'suprema' }),
+        buildResolveManualBalances(),
       );
       await repository.registerBrand(
         buildRegisterParams({ referenceDate: '2026-08-10', brand: 'ultra' }),
+        buildResolveManualBalances(),
       );
       await repository.registerBrand(
         buildRegisterParams({ referenceDate: '2026-08-10', brand: 'maxima' }),
+        buildResolveManualBalances(),
       );
 
       const querySpy = jest.spyOn(dataSource, 'query');
@@ -178,9 +273,18 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
 
   describe('reopenBrand', () => {
     it('reabre a marca (DRAFT) e o dia (OPEN) na mesma transação — nunca um sem o outro', async () => {
-      await repository.registerBrand(buildRegisterParams({ brand: 'suprema' }));
-      await repository.registerBrand(buildRegisterParams({ brand: 'ultra' }));
-      await repository.registerBrand(buildRegisterParams({ brand: 'maxima' }));
+      await repository.registerBrand(
+        buildRegisterParams({ brand: 'suprema' }),
+        buildResolveManualBalances(),
+      );
+      await repository.registerBrand(
+        buildRegisterParams({ brand: 'ultra' }),
+        buildResolveManualBalances(),
+      );
+      await repository.registerBrand(
+        buildRegisterParams({ brand: 'maxima' }),
+        buildResolveManualBalances(),
+      );
 
       const closedDay = await dataSource.query<StatusRow[]>(
         `SELECT status FROM cash_balance_days WHERE reference_date = '2026-08-15'`,

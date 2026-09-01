@@ -41,19 +41,29 @@ export interface RegisterBrandParams {
   tenantId: string;
   userId: string;
   trioBalance: number;
-  manualBalances: Map<string, number>;
   saldoJogadores: number;
-  saldoTransacional: number;
-  totalBalanco: number;
   depositsTotal: number;
   withdrawalsTotal: number;
   /** Marcas que precisam estar confirmadas para o dia fechar. */
   requiredBrands: number;
 }
 
+/**
+ * Valida e extrai os saldos manuais confirmados a partir das linhas de
+ * `cash_balance_bank_entries` já travadas (`SELECT ... FOR UPDATE`) dentro da
+ * transação de `registerBrand` — nunca de uma leitura anterior à transação,
+ * que é justamente a janela de corrida que este contrato fecha (uma
+ * confirmação concorrente entre a leitura e o commit não pode ser
+ * sobrescrita por um valor obsoleto). Deve lançar se algum banco obrigatório
+ * não estiver confirmado.
+ */
+export type ResolveManualBalances = (lockedEntries: BankEntryRecord[]) => Map<string, number>;
+
 export interface RegisterBrandOutcome {
   acumuladoMensal: number;
   dayClosed: boolean;
+  saldoTransacional: number;
+  totalBalanco: number;
 }
 
 /** Carga de um dia + marca a partir de fonte externa (planilha histórica). */

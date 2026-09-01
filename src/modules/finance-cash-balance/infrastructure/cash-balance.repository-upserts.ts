@@ -7,7 +7,7 @@ import { CashBalanceBankEntry } from '../entities/cash-balance-bank-entry.entity
 import { CashBalanceBrandSnapshot } from '../entities/cash-balance-brand-snapshot.entity';
 import { CashBalanceDaily } from '../entities/cash-balance-daily.entity';
 import { CashBalanceDay } from '../entities/cash-balance-day.entity';
-import type { BrandDailyRecord } from './cash-balance.repository.types';
+import type { BankEntryRecord, BrandDailyRecord } from './cash-balance.repository.types';
 
 /**
  * Upserts elementares usados por `CashBalanceRepository` dentro de uma
@@ -102,6 +102,26 @@ export async function upsertDaily(
       netDeposit: params.netDeposit ?? 0,
     }),
   );
+}
+
+/**
+ * Trava as linhas de bank_entries do `daily` (`SELECT ... FOR UPDATE`) —
+ * qualquer `UPDATE` concorrente na mesma linha (ex.: `confirmBank` de outro
+ * request) bloqueia até esta transação terminar. É o que fecha a janela de
+ * corrida entre ler o saldo confirmado e gravar o snapshot do `registerBrand`.
+ */
+export async function lockBankEntries(
+  manager: EntityManager,
+  dailyId: number,
+): Promise<BankEntryRecord[]> {
+  const rows = await manager
+    .getRepository(CashBalanceBankEntry)
+    .createQueryBuilder('entry')
+    .setLock('pessimistic_write')
+    .where('entry.dailyId = :dailyId', { dailyId })
+    .getMany();
+
+  return rows.map((row) => ({ bank: row.bank, balance: row.balance, confirmed: row.confirmed }));
 }
 
 export interface UpsertBankEntryParams {

@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 09 — Balanço de Caixa: use-cases + controller.**
+**Fase atual: 10 — Persistência da Conciliação (repositório).**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -54,7 +54,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 06 | Integração Trio — client + adapter point-in-time | ✅ concluída |
 | 07 | Persistência do Balanço de Caixa (repositórios + read-service) | ✅ concluída |
 | 08 | Identidade da plataforma (/auth/me) + BrandAccessService | ✅ concluída |
-| 09 | Balanço de Caixa — use-cases + services + controller | pending |
+| 09 | Balanço de Caixa — use-cases + services + controller | ✅ concluída |
 | 10 | Persistência da Conciliação (repositório) | pending |
 | 11 | ClickHouse da Conciliação (movimentos + busca de correção) | pending |
 | 12 | Trio — movimentos por bisseção + regressão | pending |
@@ -110,6 +110,22 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
    importar a classe irmã). Se um par de entidades novo (Fases 07+) tiver o mesmo padrão bidirecional,
    este é o precedente a seguir — adicionar a pasta à exclusão + as 2 regras de `import type`, não
    inventar uma solução nova.
+10. **Auditoria automática via `AuditInterceptor` por módulo, não global — decisão da Fase 09.**
+    `finance_audit_logs` (entidade desde a Fase 04) é exclusiva do Finance; o interceptor é registrado
+    como provider em `cash-balance.module.ts` e aplicado via `@UseInterceptors(AuditInterceptor)` no
+    controller — nunca em `main.ts`/`app.module.ts` (isso auditaria também as rotas do módulo
+    `[EXEMPLO]`/petshop na mesma tabela). A Fase 13 (Conciliação) precisa decidir como reusar a mesma
+    classe para suas rotas de mutação (hoje ela só resolve `FinanceAuditLog` via
+    `TypeOrmModule.forFeature` do `cash-balance.module.ts`).
+11. **`registerBrand` lê os saldos manuais confirmados sob `SELECT ... FOR UPDATE`, dentro da própria
+    transação de escrita — decisão da Fase 09, corrigindo uma race condition real encontrada pelo
+    `/code-review`.** `CashBalanceRepository.registerBrand` (Fase 07) mudou de assinatura:
+    `registerBrand(params, resolveManualBalances)` — o callback (`extractManualBalances`, no use-case)
+    só é chamado depois de `lockBankEntries` travar as linhas de `cash_balance_bank_entries` do
+    `daily`, nunca antes da transação. Qualquer escrita nova que combine "ler um agregado confirmado
+    por fora" + "escrever um snapshot calculado a partir dele" precisa do mesmo padrão (ler sob lock,
+    dentro da mesma transação da escrita) — ler fora e só depois abrir a transação de escrita é
+    exatamente a classe de bug (*lost update*) que este padrão fecha.
 
 ## Aprendizados críticos
 
@@ -269,6 +285,31 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   um service que só repassa (passthrough) o retorno de outro precisa deixar explícito no nome do teste
   que cobre repasse, não a lógica de quem produz o dado — a cobertura real do comportamento fica no
   arquivo que a implementa.
+- **Fase 09:** `finance_audit_logs` (auditoria automática, §1.6 de `REGRAS-NEGOCIO-ROTAS.md`) não
+  estava no escopo de nenhum `FASE-*.md` até esta fase, embora a entidade existisse desde a Fase 04
+  com o comentário explícito "extraídos da URL pelo interceptor de auditoria (Fase futura)". Detectado
+  como inconsistência real (não suposição) entre o plano da fase e as regras transversais — protocolo
+  de decisão (3 opções), usuário escolheu implementar o `AuditInterceptor` agora. Ver decisão 10.
+- **Fase 09:** `@AuthToken()` decorator não existia no destino (a origem tinha; nenhum `FASE-*.md`
+  listava esse arquivo) — criado em `src/auth/auth-token.decorator.ts`, mesmo padrão de
+  `current-user.decorator.ts`. Qualquer rota futura que precise repassar o Bearer bruto a uma
+  integração externa (não o payload decodificado) usa este decorator, não reinventa a extração.
+- **Fase 09:** escalonamento com `/code-review` (exigido pelo `FASE-09.md` por a fase tocar
+  permissões/isolamento por marca) encontrou 4 achados reais de uma revisão que, à primeira vista,
+  "passava todos os testes" — reforça que testes verdes não substituem revisão adversarial dedicada
+  em fases de alto risco. O mais grave: `RegisterBrandUseCase` lia saldos confirmados fora de qualquer
+  transação/lock antes de escrever, permitindo *lost update* contra uma confirmação concorrente. Ver
+  decisão 11 — qualquer combinação futura de "ler agregado confirmado por fora + escrever snapshot
+  calculado dele" precisa nascer com o mesmo padrão de lock, não como capítulo de correção posterior.
+- **Fase 09:** o primeiro teste escrito para a race condition (`Promise.all` entre duas chamadas de
+  repositório completas, comparando o valor final persistido) **não era decisivo** — removendo o
+  `.setLock('pessimistic_write')` da produção, o mesmo teste continuou passando 5/5 execuções seguidas
+  (coincidência de agendamento do Node/driver, as duas operações completas nunca chegavam a contender
+  de fato pelo lock). Mesma categoria de falso positivo de verificação já registrada nas Fases 05/07 —
+  a correção foi reescrever com controle explícito de transação (`QueryRunner` mantendo a trava aberta
+  de propósito, forçando a escrita concorrente a bloquear de verdade por um tempo mensurável antes de
+  liberar). Testar lock/concorrência real em Postgres via Testcontainers exige esse padrão — nunca só
+  `Promise.all` de chamadas de alto nível, que terminam rápido demais para gerar contenção genuína.
 
 ## Convenções de teste
 

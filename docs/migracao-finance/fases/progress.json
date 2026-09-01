@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-01T17:08:29.497Z"
+    "lastUpdated": "2026-09-01T20:28:50.774Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 8,
+    "completed": 9,
     "inProgress": 0,
-    "pending": 9,
+    "pending": 8,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 27,
-    "hoursRemaining": 45,
-    "percentComplete": 47.06,
-    "totalCostUsd": 63.64,
-    "projectedTotalCostUsd": 167.33
+    "hoursCompleted": 33,
+    "hoursRemaining": 39,
+    "percentComplete": 52.94,
+    "totalCostUsd": 101.95,
+    "projectedTotalCostUsd": 217.1
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 1316,
-    "totalOutputTokens": 519027,
-    "totalCacheWriteTokens": 1943292,
-    "totalCacheReadTokens": 161888149,
-    "totalCostUsd": 63.64,
-    "projectedTotalCostUsd": 167.33,
-    "costCalibrationFactor": 0.2165,
+    "totalInputTokens": 1850,
+    "totalOutputTokens": 722693,
+    "totalCacheWriteTokens": 2402380,
+    "totalCacheReadTokens": 273643247,
+    "totalCostUsd": 101.95,
+    "projectedTotalCostUsd": 217.1,
+    "costCalibrationFactor": 0.2808,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -91,10 +91,10 @@
         "cacheRead": 92992258
       },
       "a5e7edbc-df9f-4606-ad44-128f2327f105": {
-        "input": 88,
-        "output": 28460,
-        "cacheWrite": 133868,
-        "cacheRead": 5281502
+        "input": 622,
+        "output": 232126,
+        "cacheWrite": 592956,
+        "cacheRead": 117036600
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -394,12 +394,12 @@
     {
       "id": 9,
       "name": "Balanço de Caixa — use-cases + services + controller",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 6,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-01",
+      "completedDate": "2026-09-01",
       "dependsOn": [
         1,
         2,
@@ -407,16 +407,24 @@
         7,
         8
       ],
-      "description": "9 use-cases, 3 services (read/registry/registro), controller com as 7 rotas, DTOs, wiring do módulo — as 4 rotas GET nunca chamam Trio em tempo de request",
-      "notes": [],
+      "description": "7 use-cases, 2 services (read/registry), controller com as 7 rotas, DTOs, wiring do módulo, AuditInterceptor — as 4 rotas GET nunca chamam Trio em tempo de request",
+      "notes": [
+        "Inconsistência real detectada entre o FASE-09.md e as regras transversais: §1.6 de REGRAS-NEGOCIO-ROTAS.md exige AuditInterceptor em toda mutação autenticada (finance_audit_logs, entidade já existente desde a Fase 04 com comentário 'Fase futura' explícito), mas o plano da fase não mencionava esse mecanismo em nenhum lugar. Protocolo de decisão (3 opções) — usuário escolheu implementar o AuditInterceptor genérico agora, aplicado via @UseInterceptors no controller (não global no main.ts, porque a tabela é exclusiva do Finance, não do archetype inteiro). Fase 13 (Reconciliation) precisa decidir como reusar a mesma classe para suas rotas de mutação.",
+        "@AuthToken() decorator não existia no destino (a origem tinha; FASE-09.md não listava esse arquivo) — criado em src/auth/auth-token.decorator.ts, mesmo padrão do current-user.decorator.ts, para repassar o header Authorization bruto ao PlatformIdentityService.",
+        "Escalonamento com /code-review (segurança, exigido pelo FASE-09.md por tocar permissões/isolamento por marca) encontrou 4 achados reais, todos corrigidos: (1) AuditInterceptor sem truncar User-Agent antes de gravar em varchar(255), suprimindo silenciosamente o log de auditoria em headers longos — corrigido com .slice(0,255); (2) 4 awaits sequenciais independentes em RegisterBrandUseCase — reordenado para Promise.all nos 3 que não têm razão de ser fail-fast; (3) RACE CONDITION REAL — RegisterBrandUseCase lia os saldos manuais confirmados fora de qualquer transação/lock antes de abrir a transação de escrita, permitindo que uma confirmação concorrente entre a leitura e o commit fosse sobrescrita (lost update); corrigido com SELECT...FOR UPDATE (lockBankEntries) dentro da mesma transação de CashBalanceRepository.registerBrand (Fase 07), antes do callback de validação — mudança de assinatura em arquivo de fase anterior, decisão do usuário entre 3 opções (corrigir agora com lock real foi a escolhida); (4) regex ISO_DATE duplicado entre cash-balance.dto.ts e date.util.ts — trocado por import.",
+        "O primeiro teste de regressão escrito para a race condition (Promise.all entre registerBrand e confirmBank completos) não era decisivo — uma segunda verificação adversarial removeu o .setLock('pessimistic_write') e o teste continuou passando 5/5 (coincidência de timing entre chamadas de repositório completas, não prova de lock real). Reescrito com QueryRunner manual mantendo a transação que trava a linha aberta de propósito, provando que a escrita concorrente fica bloqueada (confirmado empiricamente nos dois sentidos: passa com o lock, falha sem ele). Mesma categoria de aprendizado já registrado nas Fases 05/07 — só um teste que falha de verdade quando o mecanismo é removido é decisivo.",
+        "RegisterBrandParams perdeu manualBalances/saldoTransacional/totalBalanco (agora calculados dentro da transação, sob lock); RegisterBrandOutcome ganhou saldoTransacional/totalBalanco; registerBrand(params) passou a registerBrand(params, resolveManualBalances) — mudança de assinatura em cash-balance.repository.ts (Fase 07), com cash-balance.repository.spec.ts e register-brand.use-case.spec.ts (Fase 09) atualizados."
+      ],
       "criteria": {
         "total": 17,
-        "passed": 0
+        "passed": 17
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 203666,
+      "costUsd": 38.3047,
       "estimatedCostUsd": 69,
       "files": [
+        "src/auth/auth-token.decorator.ts",
+        "src/modules/finance-cash-balance/infrastructure/audit.interceptor.ts",
         "src/modules/finance-cash-balance/domain/use-cases/get-summary.use-case.ts",
         "src/modules/finance-cash-balance/domain/use-cases/get-banks-state.use-case.ts",
         "src/modules/finance-cash-balance/domain/use-cases/get-history.use-case.ts",
@@ -427,7 +435,14 @@
         "src/modules/finance-cash-balance/domain/services/cash-balance-read.service.ts",
         "src/modules/finance-cash-balance/domain/services/cash-balance-registry.service.ts",
         "src/modules/finance-cash-balance/presenters/controllers/cash-balance.controller.ts",
-        "src/modules/finance-cash-balance/dto/cash-balance.dto.ts"
+        "src/modules/finance-cash-balance/dto/cash-balance.dto.ts",
+        "src/modules/finance-cash-balance/cash-balance.module.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository-upserts.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository.types.ts",
+        "src/common/utils/date.util.ts",
+        "test/finance-cash-balance.e2e-spec.ts",
+        "scripts/balanco-caixa-api/"
       ]
     },
     {

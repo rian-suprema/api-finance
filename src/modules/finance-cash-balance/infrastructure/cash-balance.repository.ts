@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, type EntityManager } from 'typeorm';
 
 import { startOfMonth, startOfNextMonth } from '../../../common/utils/date.util';
 import { roundCurrency } from '../../../common/utils/number.util';
@@ -23,6 +23,7 @@ import {
   sumMonthlyBalances as sumMonthlyBalancesQuery,
 } from './cash-balance.repository-reads';
 import {
+  lockBankEntries,
   upsertBankEntry,
   upsertDaily,
   upsertDay,
@@ -35,6 +36,7 @@ import type {
   RegisterBrandOutcome,
   RegisterBrandParams,
   RegisteredBalanceRecord,
+  ResolveManualBalances,
 } from './cash-balance.repository.types';
 
 export type {
@@ -46,6 +48,7 @@ export type {
   RegisterBrandOutcome,
   RegisterBrandParams,
   RegisteredBalanceRecord,
+  ResolveManualBalances,
 } from './cash-balance.repository.types';
 
 /**
@@ -248,14 +251,44 @@ export class CashBalanceRepository {
     });
   }
 
-  async registerBrand(params: RegisterBrandParams): Promise<RegisterBrandOutcome> {
+  /**
+   * `resolveManualBalances` roda DEPOIS do `lockBankEntries` (`SELECT ... FOR
+   * UPDATE`), nunca antes: é o que impede uma confirmação concorrente entre a
+   * leitura e o commit de ser sobrescrita por um valor obsoleto (a mesma
+   * transação lê e regrava exatamente o que travou, nunca um snapshot
+   * anterior a ela).
+   */
+  async registerBrand(
+    params: RegisterBrandParams,
+    resolveManualBalances: ResolveManualBalances,
+  ): Promise<RegisterBrandOutcome> {
     const monthStart = startOfMonth(params.referenceDate);
     const now = new Date();
 
     return this.dataSource.transaction(async (manager) => {
       const day = await upsertDay(manager, params.referenceDate);
 
+      // Garante a existência do `daily` (sem tocar status) só para ter o id a
+      // travar — a transição para CONFIRMED só acontece depois da validação.
       const daily = await upsertDaily(manager, {
+        dayId: day.id,
+        tenantId: params.tenantId,
+        brand: params.brand,
+        referenceDate: params.referenceDate,
+      });
+
+      const lockedEntries = await lockBankEntries(manager, daily.id);
+      const manualBalances = resolveManualBalances(lockedEntries);
+
+      const saldoTransacional = roundCurrency(
+        [...manualBalances.values()].reduce(
+          (total, balance) => total + balance,
+          params.trioBalance,
+        ),
+      );
+      const totalBalanco = roundCurrency(saldoTransacional - params.saldoJogadores);
+
+      await upsertDaily(manager, {
         dayId: day.id,
         tenantId: params.tenantId,
         brand: params.brand,
@@ -268,7 +301,7 @@ export class CashBalanceRepository {
         netDeposit: params.depositsTotal - params.withdrawalsTotal,
       });
 
-      for (const [bank, balance] of params.manualBalances) {
+      for (const [bank, balance] of manualBalances) {
         await upsertBankEntry(manager, {
           dailyId: daily.id,
           bank,
@@ -292,51 +325,29 @@ export class CashBalanceRepository {
         confirmedBy: null,
       });
 
-      // Acumulado mensal: soma dos balanços já confirmados no mês, incluindo este.
-      const monthSnapshots = await manager
-        .getRepository(CashBalanceBrandSnapshot)
-        .createQueryBuilder('snapshot')
-        .innerJoin('snapshot.daily', 'daily')
-        .where('daily.brand = :brand', { brand: params.brand })
-        .andWhere('daily.deletedAt IS NULL')
-        .andWhere('daily.status = :status', { status: CashBalanceBrandStatus.CONFIRMED })
-        .andWhere('daily.referenceDate >= :monthStart', { monthStart })
-        .andWhere('daily.referenceDate <= :referenceDate', { referenceDate: params.referenceDate })
-        .select(['snapshot.dailyId', 'snapshot.totalBalanco'])
-        .getMany();
-
-      const previousMonthTotal = monthSnapshots
-        .filter((snapshot) => snapshot.dailyId !== daily.id)
-        .reduce((total, snapshot) => total + snapshot.totalBalanco, 0);
-
-      const acumuladoMensal = roundCurrency(previousMonthTotal + params.totalBalanco);
+      const acumuladoMensal = await this.computeAcumuladoMensal(manager, {
+        brand: params.brand,
+        monthStart,
+        referenceDate: params.referenceDate,
+        dailyId: daily.id,
+        totalBalanco,
+      });
 
       await upsertSnapshot(manager, daily.id, {
-        saldoTransacional: params.saldoTransacional,
+        saldoTransacional,
         saldoJogadores: params.saldoJogadores,
-        totalBalanco: params.totalBalanco,
+        totalBalanco,
         acumuladoMensal,
       });
 
-      const confirmedBrands = await manager.getRepository(CashBalanceDaily).count({
-        where: {
-          referenceDate: params.referenceDate,
-          status: CashBalanceBrandStatus.CONFIRMED,
-          deletedAt: IsNull(),
-        },
+      const dayClosed = await this.closeDayIfComplete(manager, day, {
+        referenceDate: params.referenceDate,
+        requiredBrands: params.requiredBrands,
+        userId: params.userId,
+        now,
       });
 
-      const dayClosed = confirmedBrands >= params.requiredBrands;
-
-      if (dayClosed && day.status !== CashBalanceDayStatus.CLOSED) {
-        await manager.update(CashBalanceDay, day.id, {
-          status: CashBalanceDayStatus.CLOSED,
-          closedAt: now,
-          closedBy: params.userId,
-        });
-      }
-
-      return { acumuladoMensal, dayClosed };
+      return { acumuladoMensal, dayClosed, saldoTransacional, totalBalanco };
     });
   }
 
@@ -371,6 +382,63 @@ export class CashBalanceRepository {
     referenceDate: string,
   ): Promise<Map<BrandKey, number>> {
     return sumMonthlyBalancesQuery(this.dataSource, brands, referenceDate);
+  }
+
+  /** Soma dos `total_balanco` confirmados do mês até a data, excluindo o próprio `dailyId` (idempotência de re-registro). */
+  private async computeAcumuladoMensal(
+    manager: EntityManager,
+    params: {
+      brand: BrandKey;
+      monthStart: string;
+      referenceDate: string;
+      dailyId: number;
+      totalBalanco: number;
+    },
+  ): Promise<number> {
+    const monthSnapshots = await manager
+      .getRepository(CashBalanceBrandSnapshot)
+      .createQueryBuilder('snapshot')
+      .innerJoin('snapshot.daily', 'daily')
+      .where('daily.brand = :brand', { brand: params.brand })
+      .andWhere('daily.deletedAt IS NULL')
+      .andWhere('daily.status = :status', { status: CashBalanceBrandStatus.CONFIRMED })
+      .andWhere('daily.referenceDate >= :monthStart', { monthStart: params.monthStart })
+      .andWhere('daily.referenceDate <= :referenceDate', { referenceDate: params.referenceDate })
+      .select(['snapshot.dailyId', 'snapshot.totalBalanco'])
+      .getMany();
+
+    const previousMonthTotal = monthSnapshots
+      .filter((snapshot) => snapshot.dailyId !== params.dailyId)
+      .reduce((total, snapshot) => total + snapshot.totalBalanco, 0);
+
+    return roundCurrency(previousMonthTotal + params.totalBalanco);
+  }
+
+  /** Fecha o dia quando as marcas exigidas já estão `CONFIRMED`. Devolve se fechou. */
+  private async closeDayIfComplete(
+    manager: EntityManager,
+    day: CashBalanceDay,
+    params: { referenceDate: string; requiredBrands: number; userId: string; now: Date },
+  ): Promise<boolean> {
+    const confirmedBrands = await manager.getRepository(CashBalanceDaily).count({
+      where: {
+        referenceDate: params.referenceDate,
+        status: CashBalanceBrandStatus.CONFIRMED,
+        deletedAt: IsNull(),
+      },
+    });
+
+    const dayClosed = confirmedBrands >= params.requiredBrands;
+
+    if (dayClosed && day.status !== CashBalanceDayStatus.CLOSED) {
+      await manager.update(CashBalanceDay, day.id, {
+        status: CashBalanceDayStatus.CLOSED,
+        closedAt: params.now,
+        closedBy: params.userId,
+      });
+    }
+
+    return dayClosed;
   }
 
   private async ensureDaily(params: ConfirmBankParams): Promise<CashBalanceDaily> {

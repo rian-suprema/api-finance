@@ -5,7 +5,7 @@
  */
 export const TIME_ZONE = 'America/Sao_Paulo';
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const brtFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: TIME_ZONE,
