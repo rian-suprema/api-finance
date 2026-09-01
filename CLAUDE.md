@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 08 — Identidade da plataforma.**
+**Fase atual: 09 — Balanço de Caixa: use-cases + controller.**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -53,7 +53,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 05 | Integração ClickHouse — conexão global | ✅ concluída |
 | 06 | Integração Trio — client + adapter point-in-time | ✅ concluída |
 | 07 | Persistência do Balanço de Caixa (repositórios + read-service) | ✅ concluída |
-| 08 | Identidade da plataforma (/auth/me) + BrandAccessService | pending |
+| 08 | Identidade da plataforma (/auth/me) + BrandAccessService | ✅ concluída |
 | 09 | Balanço de Caixa — use-cases + services + controller | pending |
 | 10 | Persistência da Conciliação (repositório) | pending |
 | 11 | ClickHouse da Conciliação (movimentos + busca de correção) | pending |
@@ -254,6 +254,21 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   teste decisivo: mover os arquivos novos para fora do repositório, reexecutar o script confirmando
   falha real, restaurar e reconfirmar GREEN. RED genuíno e verificável, embora fora de ordem — mas o
   objetivo é não repetir a inversão de ordem numa fase futura, não só saber corrigi-la depois.
+- **Fase 08:** o texto do "Pré-requisito" do próprio `FASE-08.md` especulava que a regra de allowlist
+  de `axios` em `architecture.spec.ts` cobria só `infrastructure/trio` e precisaria de ajuste antes da
+  fase — o Pre-flight com Haiku confirmou que a regra já incluía `infrastructure/platform/**` desde a
+  Fase 03. Mesma categoria de prosa desatualizada já vista nas Fases 03/04/07: o Pre-flight existe
+  exatamente para evitar uma correção desnecessária baseada em suposição do template.
+- **Fase 08:** primeira Verificação Adversarial de Aceite reprovou por teste tautológico — nenhum
+  teste em `platform-identity.service.spec.ts` fazia asserção sobre o **conteúdo** do mapeamento
+  `tenant.slug → brand.key` (`BRANDS.flatMap`), só contagem de chamadas HTTP e tipo de exceção; o
+  teste equivalente em `brand-access.service.spec.ts` passaria mesmo com o mapeamento quebrado, porque
+  o mock de `PlatformIdentityService` já injetava o resultado pós-mapeamento (`BrandAccessService.
+  resolveBrands` é um passthrough sem lógica própria). Corrigido com um teste novo que mocka 2 tenants
+  (1 válido + 1 sem correspondência no catálogo) e verifica o array exato devolvido. Qualquer teste de
+  um service que só repassa (passthrough) o retorno de outro precisa deixar explícito no nome do teste
+  que cobre repasse, não a lógica de quem produz o dado — a cobertura real do comportamento fica no
+  arquivo que a implementa.
 
 ## Convenções de teste
 

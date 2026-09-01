@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-01T16:52:12.673Z"
+    "lastUpdated": "2026-09-01T17:08:29.497Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 7,
+    "completed": 8,
     "inProgress": 0,
-    "pending": 10,
+    "pending": 9,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 23,
-    "hoursRemaining": 49,
-    "percentComplete": 41.18,
-    "totalCostUsd": 61.13,
-    "projectedTotalCostUsd": 192.09
+    "hoursCompleted": 27,
+    "hoursRemaining": 45,
+    "percentComplete": 47.06,
+    "totalCostUsd": 63.64,
+    "projectedTotalCostUsd": 167.33
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 1228,
-    "totalOutputTokens": 490567,
-    "totalCacheWriteTokens": 1809424,
-    "totalCacheReadTokens": 156606647,
-    "totalCostUsd": 61.13,
-    "projectedTotalCostUsd": 192.09,
-    "costCalibrationFactor": 0.2485,
+    "totalInputTokens": 1316,
+    "totalOutputTokens": 519027,
+    "totalCacheWriteTokens": 1943292,
+    "totalCacheReadTokens": 161888149,
+    "totalCostUsd": 63.64,
+    "projectedTotalCostUsd": 167.33,
+    "costCalibrationFactor": 0.2165,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -89,6 +89,12 @@
         "output": 223572,
         "cacheWrite": 801736,
         "cacheRead": 92992258
+      },
+      "a5e7edbc-df9f-4606-ad44-128f2327f105": {
+        "input": 88,
+        "output": 28460,
+        "cacheWrite": 133868,
+        "cacheRead": 5281502
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -353,28 +359,36 @@
     {
       "id": 8,
       "name": "Identidade da plataforma (/auth/me) + BrandAccessService",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 4,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-01",
+      "completedDate": "2026-09-01",
       "dependsOn": [
         3
       ],
       "description": "platform-identity.service.ts (cache 60s por hash SHA-256 do token, nunca o token em log) + brand-access.service.ts (resolveBrands/requireBrand/resolveReferenceDate/resolveRange) — pré-requisito de AMBOS os módulos de negócio",
-      "notes": [],
+      "notes": [
+        "O texto do Pré-requisito do próprio FASE-08.md especulava que a regra de allowlist de axios em architecture.spec.ts restringia-se a infrastructure/trio e precisaria de ajuste — o Pre-flight com Haiku confirmou que a regra já cobria infrastructure/platform/** antes desta fase (linha 'file.directory.includes(\"infrastructure/platform\")' já existente), então nenhum ajuste no architecture.spec.ts foi necessário. Mesma categoria de omissão/desatualização de prosa já vista nas Fases 03/04/07 — o Pre-flight evitou uma correção desnecessária.",
+        "O script orgânico gerado a partir do heredoc do próprio FASE-08.md reproduziu o mesmo defeito já documentado nas Fases 01/03/05 (Jest 30 não lista nomes de teste que passaram em --verbose) — corrigido para --json --outputFile + jq '.testResults[].assertionResults[].fullName' antes de considerar o RED/GREEN confiável.",
+        "Primeira Verificação Adversarial REPROVOU por teste tautológico: nenhum teste em platform-identity.service.spec.ts fazia asserção sobre o CONTEÚDO do mapeamento tenant.slug→brand.key (BRANDS.flatMap) — só contagem de chamadas HTTP e tipo de exceção; o teste equivalente em brand-access.service.spec.ts passaria mesmo com o mapeamento quebrado, porque o mock já injetava o resultado pós-mapeamento (BrandAccessService.resolveBrands é um passthrough sem lógica própria). Corrigido com um teste novo em platform-identity.service.spec.ts que mocka 2 tenants (1 válido + 1 sem correspondência no catálogo) e verifica o array exato devolvido; o teste em brand-access.service.spec.ts foi renomeado para declarar explicitamente que é um teste de passthrough. Segunda Verificação Adversarial, independente, CONFIRMOU."
+      ],
       "criteria": {
         "total": 14,
-        "passed": 0
+        "passed": 14
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 28460,
+      "costUsd": 2.5136,
       "estimatedCostUsd": 48,
       "files": [
         "src/modules/finance-cash-balance/infrastructure/platform/platform-identity.service.ts",
+        "src/modules/finance-cash-balance/infrastructure/platform/platform-identity.service.spec.ts",
         "src/modules/finance-cash-balance/domain/services/brand-access.service.ts",
-        "src/modules/finance-cash-balance/infrastructure/platform/platform-identity.service.spec.ts"
+        "src/modules/finance-cash-balance/domain/services/brand-access.service.spec.ts",
+        "src/modules/finance-cash-balance/cash-balance.module.ts",
+        "scripts/identidade-plataforma/FASE-08-TESTE-ORGANICO.sh",
+        "scripts/identidade-plataforma/FASE-08-TESTE-ORGANICO.md"
       ]
     },
     {
