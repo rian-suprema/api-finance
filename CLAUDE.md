@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 10 — Persistência da Conciliação (repositório).**
+**Fase atual: 11 — ClickHouse da Conciliação (movimentos + busca de correção).**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -55,7 +55,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 07 | Persistência do Balanço de Caixa (repositórios + read-service) | ✅ concluída |
 | 08 | Identidade da plataforma (/auth/me) + BrandAccessService | ✅ concluída |
 | 09 | Balanço de Caixa — use-cases + services + controller | ✅ concluída |
-| 10 | Persistência da Conciliação (repositório) | pending |
+| 10 | Persistência da Conciliação (repositório) | ✅ concluída |
 | 11 | ClickHouse da Conciliação (movimentos + busca de correção) | pending |
 | 12 | Trio — movimentos por bisseção + regressão | pending |
 | 13 | Conciliação — use-cases núcleo + controller | pending |
@@ -310,6 +310,37 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   de propósito, forçando a escrita concorrente a bloquear de verdade por um tempo mensurável antes de
   liberar). Testar lock/concorrência real em Postgres via Testcontainers exige esse padrão — nunca só
   `Promise.all` de chamadas de alto nível, que terminam rápido demais para gerar contenção genuína.
+- **Fase 10:** bug real confirmado empiricamente contra Postgres real (não suposição):
+  `useDefineForClassFields` (tsconfig) faz `repo.create({...})` do TypeORM gravar `undefined` como
+  propriedade própria em toda coluna não informada no objeto passado — e o `decimalTransformer`
+  converte esse `undefined` em `NULL` explícito no `INSERT`, ignorando o `default: 0`/`default: false`
+  da coluna e violando `NOT NULL`. Afetou `startRun` (as 16 colunas de totais + 2 contagens de
+  `ReconciliationRun`) e `platformReprocessPending` de `ReconciliationItem`. Corrigido zerando
+  explicitamente (`ZERO_TOTALS` em `reconciliation-run.repository.ts`) em vez de confiar no default do
+  banco — o mesmo padrão já existia em `upsertDaily` (Fase 07) mas nunca tinha sido nomeado como regra
+  geral: **qualquer coluna com `default` no Postgres precisa de valor explícito em `repo.create()`**,
+  porque o default do banco só se aplica quando a coluna está ausente do `INSERT`, e `create()` nunca a
+  omite quando a classe tem a propriedade declarada.
+- **Fase 10:** segundo bug real, mesma causa-raiz de classe diferente: `dataSource.query()` (raw SQL)
+  não passa pelo transform de coluna do TypeORM — só `repo.find()`/`QueryBuilder` devolvem `date` como
+  `string` `YYYY-MM-DD` (achado empírico da Fase 07); o driver `pg` puro devolve `Date` para o OID
+  `date`. `countItemsInRange` quebrava a chave `dia|marca` (`${row.reference_date}|${row.brand}`) por
+  isso — corrigido com `reference_date::text AS reference_date` no `SELECT`. Qualquer raw query futura
+  que agrupe ou devolva uma coluna `date` como parte de uma chave/comparação precisa do mesmo cast —
+  `fromDateOnly`/normalização em JS não bastaria sozinha, o cast no SQL é a correção mais direta.
+- **Fase 10:** o mesmo defeito de script orgânico já documentado nas Fases 01/03/05/08 (Jest 30 não
+  lista nomes de teste que passaram no reporter `--verbose`, só detalha falhas) apareceu de novo no
+  próprio texto do `FASE-10.md` — o bloco de script fornecido literalmente na especificação da fase
+  ainda usava `--verbose` + `grep` na saída. Corrigido para `--json --outputFile=<tmp>` +
+  `jq -r '.testResults[].assertionResults[].fullName'` antes de considerar RED/GREEN confiável. Quinta
+  ocorrência do mesmo gotcha copiado de um template desatualizado — vale revisar todo `FASE-*.md`
+  restante (11-17) por esse padrão antes de rodar o script literal fornecido nele.
+- **Fase 10:** `brand`/`bank` ficam tipados como `string` nos 2 repositórios novos, não `BrandKey` —
+  `BrandKey` só existe em `cash-balance.constants.ts` (módulo `finance-cash-balance`), e a decisão 10
+  deste documento proíbe import direto de arquivo de outro módulo (só via service exportado). A coluna
+  da entidade já é `varchar`, então não há perda de garantia no banco; a validação contra o catálogo de
+  marcas conhecidas (`BRANDS`) fica para o use-case da Fase 13, via `BrandAccessService` — mesmo padrão
+  provisório já registrado nas Fases 01/02/06 para tipos que só existem de verdade numa fase posterior.
 
 ## Convenções de teste
 

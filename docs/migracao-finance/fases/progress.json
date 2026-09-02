@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-01T20:28:50.774Z"
+    "lastUpdated": "2026-09-02T13:45:03.025Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 9,
+    "completed": 10,
     "inProgress": 0,
-    "pending": 8,
+    "pending": 7,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 33,
-    "hoursRemaining": 39,
-    "percentComplete": 52.94,
-    "totalCostUsd": 101.95,
-    "projectedTotalCostUsd": 217.1
+    "hoursCompleted": 38,
+    "hoursRemaining": 34,
+    "percentComplete": 58.82,
+    "totalCostUsd": 109.67,
+    "projectedTotalCostUsd": 205.27
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 1850,
-    "totalOutputTokens": 722693,
-    "totalCacheWriteTokens": 2402380,
-    "totalCacheReadTokens": 273643247,
-    "totalCostUsd": 101.95,
-    "projectedTotalCostUsd": 217.1,
-    "costCalibrationFactor": 0.2808,
+    "totalInputTokens": 2020,
+    "totalOutputTokens": 796694,
+    "totalCacheWriteTokens": 3019031,
+    "totalCacheReadTokens": 287989617,
+    "totalCostUsd": 109.67,
+    "projectedTotalCostUsd": 205.27,
+    "costCalibrationFactor": 0.2656,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -95,6 +95,12 @@
         "output": 232126,
         "cacheWrite": 592956,
         "cacheRead": 117036600
+      },
+      "20f9f79a-23c4-4bbb-b527-328d84149e2c": {
+        "input": 170,
+        "output": 74001,
+        "cacheWrite": 616651,
+        "cacheRead": 14346370
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -448,28 +454,38 @@
     {
       "id": 10,
       "name": "Persistência da Conciliação (repositório)",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 5,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-02",
+      "completedDate": "2026-09-02",
       "dependsOn": [
         4
       ],
-      "description": "reconciliation.repository.ts (partido em run-repository/item-repository se estourar max-lines:400) — upsert por chave natural preservando nota/status/autor",
-      "notes": [],
+      "description": "reconciliation-run.repository.ts + reconciliation-item.repository.ts (partido por responsabilidade: saveResult extraído em -save-result.ts por tamanho de função) — upsert por chave natural preservando nota/status/autor",
+      "notes": [
+        "`brand`/`bank` tipados como `string` nesta camada, não `BrandKey` — decisão 10 do CLAUDE.md proíbe import direto de arquivo de outro módulo (só via service exportado), e `BrandKey` só existe em cash-balance.constants.ts; a coluna da entidade já é varchar. Validação contra o catálogo de marcas fica para o use-case (Fase 13, via BrandAccessService) — mesmo padrão provisório já registrado nas Fases 01/02/06.",
+        "Bug real encontrado empiricamente (não suposição): `useDefineForClassFields` (tsconfig) faz `repo.create({...})` gravar `undefined` como propriedade própria em toda coluna não informada, e o `decimalTransformer` converte esse `undefined` em `NULL` explícito no INSERT — ignora o `default: 0`/`default: false` da coluna e viola NOT NULL. Afeta `startRun` (16 totais + 2 contagens de ReconciliationRun) e `platformReprocessPending` de ReconciliationItem. Corrigido zerando explicitamente (`ZERO_TOTALS`) em vez de confiar no default do banco — mesma causa/correção do padrão já usado em `upsertDaily` (Fase 07), mas nunca tinha sido documentada como bug geral: qualquer coluna com `default` do Postgres precisa de valor explícito em `repo.create()`, nunca confiar no default puro.",
+        "Segundo bug real: `dataSource.query()` (raw SQL) bypassa o transform de coluna do TypeORM — só `repo.find()`/QueryBuilder devolvem `date` como string `YYYY-MM-DD` (achado da Fase 07); o driver `pg` puro devolve `Date` para OID `date`. `countItemsInRange` quebrava a chave `dia|marca` por isso — corrigido com `reference_date::text AS reference_date` no SELECT. Qualquer raw query futura que agrupe/retorne uma coluna `date` precisa do mesmo cast.",
+        "Mesmo defeito de script orgânico já documentado nas Fases 01/03/05/08 (Jest 30 não lista nomes de teste que passaram em `--verbose`) reproduzido no próprio texto do FASE-10.md (script fornecido literalmente usava `--verbose` + grep) — corrigido para `--json --outputFile` + `jq '.testResults[].assertionResults[].fullName'` antes de considerar RED/GREEN confiável."
+      ],
       "criteria": {
         "total": 14,
-        "passed": 0
+        "passed": 14
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 74001,
+      "costUsd": 7.7269,
       "estimatedCostUsd": 50,
       "files": [
         "src/modules/finance-reconciliation/infrastructure/reconciliation-run.repository.ts",
         "src/modules/finance-reconciliation/infrastructure/reconciliation-item.repository.ts",
-        "src/modules/finance-reconciliation/reconciliation.constants.ts"
+        "src/modules/finance-reconciliation/infrastructure/reconciliation-item.repository-save-result.ts",
+        "src/modules/finance-reconciliation/infrastructure/reconciliation.repository.types.ts",
+        "src/modules/finance-reconciliation/infrastructure/reconciliation-run.repository.spec.ts",
+        "src/modules/finance-reconciliation/infrastructure/reconciliation-item.repository.spec.ts",
+        "src/modules/finance-reconciliation/reconciliation.module.ts",
+        "scripts/persistencia-conciliacao/FASE-10-TESTE-ORGANICO.sh"
       ]
     },
     {
