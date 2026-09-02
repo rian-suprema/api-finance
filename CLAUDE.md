@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 16 — Contrato do archetype (prefixo/Swagger/health/decimal).**
+**Fase atual: 17 — Fechamento (última).**
 
 > **Marco: as 14 rotas de negócio do Finance estão completas** (7 do balanço de caixa + 7 da
 > conciliação, incluindo as 2 de evidência de correção da Fase 14). O `CronJob` (Fase 15) substitui
@@ -65,7 +65,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 13 | Conciliação — use-cases núcleo + controller | ✅ concluída |
 | 14 | Conciliação — evidência de correção de saldo | ✅ concluída |
 | 15 | Jobs — CronJob Helm + 5 CLIs + defesa `assertKnownBrand` (sem RLS) | ✅ concluída |
-| 16 | Contrato do archetype (prefixo/Swagger/health/decimal) | pending |
+| 16 | Contrato do archetype (prefixo/Swagger/health/decimal) | ✅ concluída |
 | 17 | Fechamento — e2e completo, quality gates, cutover | pending |
 
 ### Decisões já fechadas para esta trilha (não reabrir sem novo ADR)
@@ -517,6 +517,14 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   efêmero a cada run) passou 36/36 sem ressalva. Vale lembrar: scripts orgânicos com `curl` contra o
   Postgres de desenvolvimento (`docker compose`) não são idempotentes entre execuções manuais — só o
   e2e com Testcontainers garante estado limpo a cada rodada.
+- **Fase 16:** auditoria veio GREEN na primeira execução do script orgânico — nenhuma alteração foi
+  necessária em `src/main.ts` ou `src/health/health.controller.ts`. Confirmado: prefixo `/api/v1`
+  dinâmico via `API_PREFIX` (nunca hardcoded), Swagger code-first já lista `cash-balance`/
+  `reconciliation` via `@ApiTags` sem listagem manual, readiness continua só Postgres, as 18 colunas
+  monetárias das 8 entidades do Finance têm `decimalTransformer` (contagem exata confirmada por
+  Haiku) e `overrides.js-yaml` continua aplicado a `@nestjs/swagger`. Nenhuma decisão nova, nenhum
+  ADR — primeira fase da trilha sem nenhum aprendizado de correção real, só confirmação do que as
+  Fases 03/04/06/07/09 já tinham fixado.
 
 ## Convenções de teste
 
