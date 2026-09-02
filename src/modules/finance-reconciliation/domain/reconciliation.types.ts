@@ -119,3 +119,91 @@ export interface RunTotals {
  *   Não explica o pagamento; é o fio para investigar.
  */
 export type CorrectionConfidence = 'EXACT_SAME_BRAND' | 'EXACT_OTHER_BRAND' | 'SUM' | 'PARTIAL';
+
+/**
+ * Views da API (Fase 13) — portadas só agora porque dependiam de `BrandKey`
+ * (ver Fase 01). Ficam como `brand: string`, não `BrandKey`: mesma decisão já
+ * tomada em `reconciliation.repository.types.ts` (este módulo não importa
+ * arquivo de outro módulo — decisão 10 do CLAUDE.md).
+ */
+
+/** Resultado de uma marca depois de `RunReconciliationUseCase.execute`. */
+export interface RunOutcome {
+  referenceDate: string;
+  brand: string;
+  matchedCount?: number;
+  pendingCount?: number;
+  /** Presente quando a marca não pôde ser conciliada (config ausente, exceção, reentrância). */
+  error?: string;
+}
+
+export type ReconciliationStatus = 'NOT_RUN' | 'RUNNING' | 'FAILED' | 'DONE';
+
+export interface ReconciliationItemView {
+  id: number;
+  flow: ReconciliationFlow;
+  side: ReconciliationSide;
+  amount: number;
+  occurredAt: Date | null;
+  endToEndId: string | null;
+  counterpartyName: string | null;
+  /** Formatado e completo (`formatTaxNumber`) — ver DADOS-FINANCE.md/REGRAS-NEGOCIO-ROTAS.md §3.8. */
+  counterpartyTaxNumber: string | null;
+  status: string;
+  note: string | null;
+  resolvedAt: Date | null;
+  resolvedBy: string | null;
+  stillPending: boolean;
+  platformReprocessPending: boolean;
+}
+
+export interface ReconciliationBrandView {
+  brand: string;
+  status: ReconciliationStatus;
+  message?: string;
+  /** Reflete só o `Set` em memória do processo que respondeu — ver §3.1. */
+  running: boolean;
+  matchedCount: number;
+  openCount: number;
+  resolvedCount: number;
+  reprocessPendingCount: number;
+  itemsTruncated: boolean;
+  totals: RunTotals;
+  depositsDifference: number;
+  withdrawalsDifference: number;
+  reconciled: boolean;
+  items: ReconciliationItemView[];
+}
+
+export interface ReconciliationResult {
+  referenceDate: string;
+  brands: ReconciliationBrandView[];
+  allReconciled: boolean;
+}
+
+export type ReconciliationDayStatus = 'NOT_RUN' | 'FAILED' | 'RUNNING' | 'PENDING' | 'RECONCILED';
+
+export interface ReconciliationHistoryBrandRow {
+  brand: string;
+  status: ReconciliationDayStatus;
+}
+
+export interface ReconciliationHistoryDay {
+  referenceDate: string;
+  status: ReconciliationDayStatus;
+  brands: ReconciliationHistoryBrandRow[];
+}
+
+export interface ReconciliationHistoryResult {
+  from: string;
+  to: string;
+  rangeDays: number;
+  days: ReconciliationHistoryDay[];
+  reconciledDays: number;
+  pendingDays: number;
+  missingDays: number;
+  openCount: number;
+  openAmount: number;
+  resolvedCount: number;
+  allReconciled: boolean;
+}

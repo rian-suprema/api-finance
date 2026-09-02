@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 13 — Conciliação: use-cases núcleo + controller.**
+**Fase atual: 14 — Conciliação: evidência de correção de saldo.**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -58,7 +58,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 10 | Persistência da Conciliação (repositório) | ✅ concluída |
 | 11 | ClickHouse da Conciliação (movimentos + busca de correção) | ✅ concluída |
 | 12 | Trio — movimentos por bisseção + regressão | ✅ concluída |
-| 13 | Conciliação — use-cases núcleo + controller | pending |
+| 13 | Conciliação — use-cases núcleo + controller | ✅ concluída |
 | 14 | Conciliação — evidência de correção de saldo | pending |
 | 15 | Jobs — CronJob Helm + crons + 5 CLIs + RLS no caminho job | pending |
 | 16 | Contrato do archetype (prefixo/Swagger/health/decimal) | pending |
@@ -135,6 +135,23 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
     reuso futuro entre os dois módulos de negócio segue o mesmo padrão (provider exportado + módulo
     importado), nunca import direto de arquivo interno do outro módulo (entidade, repositório,
     use-case) — só de uma classe que o `exports:` do módulo alvo declara explicitamente.
+13. **`:id` das rotas `resolve`/`reopen` usa `ParseIntPipe`, não `ParseUUIDPipe` — decisão da Fase 13,
+    corrigindo uma inconsistência real do `FASE-13.md` original.** O texto do planejamento citava
+    `ParseUUIDPipe` (e o script de teste orgânico usava um placeholder UUID), mas
+    `ReconciliationItem.id` é `SERIAL` desde a Fase 04 (decisão 4 — nenhuma tabela do Finance usa UUID
+    como PK). Resolvido com `ParseIntPipe` nas 2 rotas; o placeholder do script passou a ser um
+    inteiro inexistente (`999999999`).
+14. **`AuditInterceptor` é reusado pelas rotas de mutação da Conciliação via export de
+    `cash-balance.module.ts` — decisão da Fase 13, resolvendo a pendência explícita da decisão 10.**
+    `AuditInterceptor` entrou em `exports`, mas isso não bastou por si só: `@UseInterceptors(Classe)`
+    resolve as dependências do enhancer no container do módulo que **declara o controller**
+    (`ReconciliationModule`), não no módulo de origem da classe — descoberta empírica ao subir a app
+    (`UnknownDependenciesException` em `FinanceAuditLogRepository`). A correção foi reexportar o
+    próprio `TypeOrmModule` (não um token específico) de `cash-balance.module.ts`, o que reexporta
+    todas as suas entidades registradas via `forFeature` para qualquer módulo importador. Precedente:
+    qualquer enhancer (`@UseGuards`/`@UseInterceptors`/`@UsePipes` com classe) que dependa de um
+    repositório TypeORM de outro módulo precisa desse padrão — exportar só a classe do enhancer não
+    é suficiente se a dependência transitiva dela não estiver visível no módulo consumidor.
 
 ## Aprendizados críticos
 
@@ -390,6 +407,39 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   de importar o tipo `BrandKey` de `cash-balance.constants` só para o cast. Vale como padrão sempre
   que uma chamada cruzada de módulo precisar de um tipo mais estrito do lado importado: preferir
   derivar o tipo estruturalmente da própria assinatura da função a importar o tipo nominal.
+- **Fase 13:** bug real de configuração encontrado pelo primeiro e2e desta trilha a fazer asserção de
+  valor monetário real ponta a ponta contra os stubs: `.env.test` tinha `TRIO_AMOUNT_DIVISOR=1`,
+  divergindo da decisão 6 (confirmada em `100` na Fase 06 — só `.env`/`.env.example` tinham sido
+  atualizados, `.env.test` ficou esquecido). Sem a correção, todo valor em reais vindo da Trio chegava
+  100× maior no e2e. Corrigido para `100`. Vale revisar `.env.test` sempre que uma decisão de env
+  fail-fast (item 7 desta lista) for confirmada só nos outros arquivos de ambiente.
+- **Fase 13:** `ResolveItemUseCase` concentra as 2 transições de estado da pendência (`resolve()` e
+  `reopen()`), não dois use-cases separados como o `FASE-13.md` original listava — decisão de
+  implementação (não arquitetural) para manter o construtor de `ReconciliationService` em 5
+  dependências (`max-params` do ESLint, que conta `BrandAccessService` + os 4 use-cases restantes).
+  As duas transições compartilham a mesma checagem de posse (`findOwnedItem`: busca por id +
+  autorização pela marca do dado). Precedente: se um novo use-case entraria como 6º parâmetro do
+  service, primeiro verificar se ele compartilha responsabilidade real com outro já injetado antes de
+  desabilitar a regra ou reestruturar o service.
+- **Fase 13:** a Verificação Adversarial de Aceite confirmou os 10 critérios formais mas achou uma
+  lacuna de processo real: nenhuma das 6 classes novas (5 use-cases efetivos + service) tinha
+  `*.spec.ts` colocalizado, diferente de toda fase anterior do `finance-cash-balance`. O `FASE-13.md`
+  original só pedia e2e para esta fase — decisão do usuário (2 opções) foi adicionar os 6 specs antes
+  de fechar, com mocks de repositório (sem infra), cobrindo especificamente: a guarda de reentrância
+  em memória (prova por chamadas síncronas concorrentes, sem precisar de temporizador), a exclusão de
+  `TREASURY` do casamento, `reconciled` falso com `openCount > 0` mesmo em `DONE`, a severidade
+  `NOT_RUN > PENDING` do histórico, e a validação da nota após `trim()`. Vale como lembrete: um
+  `FASE-*.md` que não lista specs unitários para uma fase de use-cases é omissão a verificar contra a
+  convenção geral do projeto, não silêncio = "não precisa" (mesma categoria das omissões de prosa já
+  registradas nas Fases 03/04/07).
+- **Fase 13:** golden dataset do e2e (`scripts/finance-dev-stubs.js`, marca `suprema`, dia
+  `2026-06-15`, `RECON_BANK_ROWS`/`RECON_PLATFORM_*`) validado manualmente via `psql` contra Postgres
+  real antes de travar os números nos testes — `matchedCount=4`, `openCount=7` (2 pendências:
+  1 depósito+1 saque órfãos de cada lado, mais 1 depósito e 4 saques sem chave do lado banco),
+  `resolvedCount=2` (os 2 estornos liquidados automaticamente), `reprocessPendingCount=1`. Confirma
+  a invariante `diferença (banco − plataforma) = crossover + pendências` nos 2 fluxos. Qualquer
+  alteração futura no stub de conciliação precisa recalcular esses números à mão antes de mudar as
+  asserções do e2e — não são arbitrários, vêm de leitura linha a linha do dataset.
 
 ## Convenções de teste
 

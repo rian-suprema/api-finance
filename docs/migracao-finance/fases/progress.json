@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-02T18:40:51.349Z"
+    "lastUpdated": "2026-09-02T21:36:52.916Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 12,
+    "completed": 13,
     "inProgress": 0,
-    "pending": 5,
+    "pending": 4,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 48,
-    "hoursRemaining": 24,
-    "percentComplete": 70.59,
-    "totalCostUsd": 131.84,
-    "projectedTotalCostUsd": 191.2
+    "hoursCompleted": 54,
+    "hoursRemaining": 18,
+    "percentComplete": 76.47,
+    "totalCostUsd": 148.86,
+    "projectedTotalCostUsd": 191.15
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,12 +63,12 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 2344,
-    "totalOutputTokens": 886596,
-    "totalCacheWriteTokens": 3832207,
-    "totalCacheReadTokens": 347199776,
-    "totalCostUsd": 131.84,
-    "projectedTotalCostUsd": 191.2,
+    "totalInputTokens": 2622,
+    "totalOutputTokens": 1042645,
+    "totalCacheWriteTokens": 4457609,
+    "totalCacheReadTokens": 388328283,
+    "totalCostUsd": 148.86,
+    "projectedTotalCostUsd": 191.15,
     "costCalibrationFactor": 0.2473,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
@@ -101,6 +101,12 @@
         "output": 163903,
         "cacheWrite": 1429827,
         "cacheRead": 73556529
+      },
+      "e628eb2a-f318-4b49-a49c-13f245a0fbc1": {
+        "input": 278,
+        "output": 156049,
+        "cacheWrite": 625402,
+        "cacheRead": 41128507
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -563,12 +569,12 @@
     {
       "id": 13,
       "name": "Conciliação — use-cases núcleo + controller",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 6,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-02",
+      "completedDate": "2026-09-02",
       "dependsOn": [
         1,
         8,
@@ -577,24 +583,42 @@
         12
       ],
       "description": "get-reconciliation, get-reconciliation-history, run-reconciliation, resolve-item, reopen-item + ReconciliationService + rotas 8,9,10,13,14 do controller",
-      "notes": [],
+      "notes": [
+        "Inconsistência real do plano corrigida com decisão do usuário (3 opções): `:id` das rotas resolve/reopen usa `ParseIntPipe`, não `ParseUUIDPipe` como o FASE-13.md original citava — `ReconciliationItem.id` é `SERIAL` (decisão 4 do CLAUDE.md), nunca UUID. O script de teste orgânico da fase também citava um placeholder UUID; corrigido para um inteiro inexistente.",
+        "Decisão do usuário (3 opções) para o reuso do `AuditInterceptor` pelas rotas de mutação da Conciliação: exportado de `cash-balance.module.ts` (decisão 10 do CLAUDE.md, pendência explícita desta fase). Descoberta empírica ao subir a app: `@UseInterceptors(Classe)` resolve as dependências do enhancer no container do módulo que DECLARA O CONTROLLER, não no módulo de origem da classe — exportar só `AuditInterceptor` não bastou; foi preciso reexportar o próprio `TypeOrmModule` de `cash-balance.module.ts` para que `FinanceAuditLogRepository` (dependência transitiva) ficasse visível em `ReconciliationModule`.",
+        "Bug real de configuração encontrado e corrigido pelo e2e desta fase: `.env.test` tinha `TRIO_AMOUNT_DIVISOR=1`, divergindo da decisão 6 do CLAUDE.md (confirmada em 100 na Fase 06 — só `.env`/`.env.example` tinham sido atualizados). Todo valor monetário da Trio chegava 100× maior no e2e; só apareceu agora porque é a primeira fase com asserção de valor real ponta a ponta contra os stubs. Corrigido para 100.",
+        "`ResolveItemUseCase` concentra as transições resolve E reopen da pendência (uma classe, não duas) — decisão de implementação para manter o construtor de `ReconciliationService` em 5 parâmetros (`max-params` do ESLint); as duas transições compartilham a mesma checagem de posse (busca por id + autorização pelo dado). `reopen-item.use-case.ts` citado no FASE-13.md não chegou a existir como arquivo próprio.",
+        "Verificação Adversarial de Aceite (sub-agente em contexto isolado) confirmou os 10 critérios centrais com evidência de código, mas achou uma lacuna de processo real: nenhuma das 6 classes novas tinha `*.spec.ts` colocalizado, divergindo da convenção seguida em toda fase anterior do módulo `finance-cash-balance` (\"Convenções de teste\" do CLAUDE.md). Decisão do usuário (2 opções): adicionar os 6 specs unitários antes de fechar a fase — feito, cobrindo a guarda de reentrância, a exclusão de TREASURY do casamento, a autorização pelo dado (não pela URL) e a severidade do histórico com mocks, sem depender de infra real.",
+        "Golden dataset do e2e (`scripts/finance-dev-stubs.js`, marca `suprema`, dia `2026-06-15`) validado manualmente contra Postgres real via `psql` antes de travar os números nos testes: matchedCount=4, openCount=7, resolvedCount=2 (estornos liquidados), reprocessPendingCount=1 — confirma a invariante `diferença (banco − plataforma) = crossover + pendências` dos 2 fluxos."
+      ],
       "criteria": {
         "total": 17,
-        "passed": 0
+        "passed": 17
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 156049,
+      "costUsd": 17.0254,
       "estimatedCostUsd": 69,
       "files": [
-        "src/modules/finance-reconciliation/domain/use-cases/get-reconciliation.use-case.ts",
-        "src/modules/finance-reconciliation/domain/use-cases/get-reconciliation-history.use-case.ts",
         "src/modules/finance-reconciliation/domain/use-cases/run-reconciliation.use-case.ts",
+        "src/modules/finance-reconciliation/domain/use-cases/run-reconciliation.use-case.spec.ts",
+        "src/modules/finance-reconciliation/domain/use-cases/get-reconciliation.use-case.ts",
+        "src/modules/finance-reconciliation/domain/use-cases/get-reconciliation.use-case.spec.ts",
+        "src/modules/finance-reconciliation/domain/use-cases/get-reconciliation-history.use-case.ts",
+        "src/modules/finance-reconciliation/domain/use-cases/get-reconciliation-history.use-case.spec.ts",
         "src/modules/finance-reconciliation/domain/use-cases/resolve-item.use-case.ts",
-        "src/modules/finance-reconciliation/domain/use-cases/reopen-item.use-case.ts",
+        "src/modules/finance-reconciliation/domain/use-cases/resolve-item.use-case.spec.ts",
         "src/modules/finance-reconciliation/domain/services/reconciliation.service.ts",
-        "src/modules/finance-reconciliation/presenters/controllers/reconciliation.controller.ts",
+        "src/modules/finance-reconciliation/domain/services/reconciliation.service.spec.ts",
         "src/modules/finance-reconciliation/dto/reconciliation.dto.ts",
-        "src/modules/finance-reconciliation/reconciliation.module.ts"
+        "src/modules/finance-reconciliation/presenters/controllers/reconciliation.controller.ts",
+        "src/modules/finance-reconciliation/presenters/controllers/reconciliation.controller.spec.ts",
+        "src/modules/finance-reconciliation/reconciliation.module.ts",
+        "src/modules/finance-reconciliation/domain/reconciliation.types.ts",
+        "src/modules/finance-cash-balance/cash-balance.module.ts",
+        ".env.test",
+        "test/finance-reconciliation.e2e-spec.ts",
+        "scripts/conciliacao-api/FASE-13-TESTE-ORGANICO.sh",
+        "scripts/conciliacao-api/FASE-13-TESTE-ORGANICO.md"
       ]
     },
     {

@@ -30,7 +30,20 @@ import { CashBalanceController } from './presenters/controllers/cash-balance.con
  * `ReconciliationModule` (`TrioBankingClient` desde a Fase 12, para
  * `TrioMovementsService`; `BrandAccessService` a partir da Fase 13) —
  * colaboração entre módulos só via service exportado, nunca import direto de
- * arquivo de outro módulo.
+ * arquivo de outro módulo. `AuditInterceptor` entra no `exports` pelo mesmo
+ * motivo (Fase 13, decisão do usuário): `ReconciliationController` reusa a
+ * mesma classe via `@UseInterceptors(AuditInterceptor)`.
+ *
+ * `TypeOrmModule` (o módulo dinâmico, não um token) também entra no
+ * `exports` — descoberta empírica desta fase: `@UseInterceptors(Classe)`
+ * resolve as dependências do enhancer no container do módulo que declara o
+ * controller (`ReconciliationModule`), não no container onde a classe foi
+ * originalmente registrada. Sem reexportar `TypeOrmModule`,
+ * `FinanceAuditLogRepository` (dependência de `AuditInterceptor`) fica
+ * invisível para `ReconciliationModule` e o boot falha com
+ * `UnknownDependenciesException`. Reexportar o módulo dinâmico (em vez de só
+ * um token específico) resolve sem duplicar `TypeOrmModule.forFeature(...)`
+ * noutro módulo.
  */
 @Module({
   imports: [
@@ -63,11 +76,13 @@ import { CashBalanceController } from './presenters/controllers/cash-balance.con
     CashBalanceRegistryService,
   ],
   exports: [
+    TypeOrmModule,
     CashBalanceRepository,
     TrioClosingBalanceRepository,
     ClickHouseReadService,
     TrioBankingClient,
     BrandAccessService,
+    AuditInterceptor,
   ],
 })
 export class CashBalanceModule {}

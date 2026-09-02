@@ -9,23 +9,36 @@ import { PlatformMovementsService } from './infrastructure/clickhouse/platform-m
 import { ReconciliationItemRepository } from './infrastructure/reconciliation-item.repository';
 import { ReconciliationRunRepository } from './infrastructure/reconciliation-run.repository';
 import { TrioMovementsService } from './infrastructure/trio/trio-movements.service';
+import { ReconciliationService } from './domain/services/reconciliation.service';
+import { GetReconciliationHistoryUseCase } from './domain/use-cases/get-reconciliation-history.use-case';
+import { GetReconciliationUseCase } from './domain/use-cases/get-reconciliation.use-case';
+import { ResolveItemUseCase } from './domain/use-cases/resolve-item.use-case';
+import { RunReconciliationUseCase } from './domain/use-cases/run-reconciliation.use-case';
+import { ReconciliationController } from './presenters/controllers/reconciliation.controller';
 
 /**
  * Ganha conteúdo progressivamente nas Fases 10–14. Repositórios e serviços de
- * leitura são exportados para a Fase 13 (use-cases/controller).
+ * leitura são exportados para a Fase 14 (evidência de correção) e Fase 15
+ * (CLI/CronJob).
  *
- * Importa `CashBalanceModule` para reusar `TrioBankingClient` (exportado de
- * lá desde a Fase 12, para `TrioMovementsService`) — colaboração entre
- * módulos só via provider exportado, nunca duplicando o cliente Trio.
+ * Importa `CashBalanceModule` para reusar `TrioBankingClient`/`BrandAccessService`/
+ * `AuditInterceptor` (exportados de lá — Fases 12/13) — colaboração entre
+ * módulos só via provider exportado, nunca duplicando cliente/lógica/tabela.
  */
 @Module({
   imports: [TypeOrmModule.forFeature([ReconciliationRun, ReconciliationItem]), CashBalanceModule],
+  controllers: [ReconciliationController],
   providers: [
     ReconciliationRunRepository,
     ReconciliationItemRepository,
     PlatformMovementsService,
     CorrectionSearchService,
     TrioMovementsService,
+    RunReconciliationUseCase,
+    GetReconciliationUseCase,
+    GetReconciliationHistoryUseCase,
+    ResolveItemUseCase,
+    ReconciliationService,
   ],
   exports: [
     ReconciliationRunRepository,
@@ -33,6 +46,8 @@ import { TrioMovementsService } from './infrastructure/trio/trio-movements.servi
     PlatformMovementsService,
     CorrectionSearchService,
     TrioMovementsService,
+    RunReconciliationUseCase,
+    ReconciliationService,
   ],
 })
 export class ReconciliationModule {}
