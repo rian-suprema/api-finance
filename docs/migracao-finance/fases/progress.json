@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-02T13:45:03.025Z"
+    "lastUpdated": "2026-09-02T16:07:57.499Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 10,
+    "completed": 11,
     "inProgress": 0,
-    "pending": 7,
+    "pending": 6,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 38,
-    "hoursRemaining": 34,
-    "percentComplete": 58.82,
-    "totalCostUsd": 109.67,
-    "projectedTotalCostUsd": 205.27
+    "hoursCompleted": 43,
+    "hoursRemaining": 29,
+    "percentComplete": 64.71,
+    "totalCostUsd": 118.15,
+    "projectedTotalCostUsd": 193.09
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 2020,
-    "totalOutputTokens": 796694,
-    "totalCacheWriteTokens": 3019031,
-    "totalCacheReadTokens": 287989617,
-    "totalCostUsd": 109.67,
-    "projectedTotalCostUsd": 205.27,
-    "costCalibrationFactor": 0.2656,
+    "totalInputTokens": 2162,
+    "totalOutputTokens": 836889,
+    "totalCacheWriteTokens": 3382251,
+    "totalCacheReadTokens": 309702314,
+    "totalCostUsd": 118.15,
+    "projectedTotalCostUsd": 193.09,
+    "costCalibrationFactor": 0.2498,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -97,10 +97,10 @@
         "cacheRead": 117036600
       },
       "20f9f79a-23c4-4bbb-b527-328d84149e2c": {
-        "input": 170,
-        "output": 74001,
-        "cacheWrite": 616651,
-        "cacheRead": 14346370
+        "input": 312,
+        "output": 114196,
+        "cacheWrite": 979871,
+        "cacheRead": 36059067
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -491,28 +491,36 @@
     {
       "id": 11,
       "name": "ClickHouse da Conciliação (movimentos + busca de correção)",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 5,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-02",
+      "completedDate": "2026-09-02",
       "dependsOn": [
         5
       ],
       "description": "platform-movements.service.ts (FINAL, deposit_ts×transaction_date) + correction-search.service.ts (ponte CPF→client_id + coluna cpf direta)",
-      "notes": [],
+      "notes": [
+        "Portado literalmente da origem (sayplus-modules/finance) — `brand` tipado como `string`, não `BrandKey`, mesma decisão da Fase 10 (sem import direto entre módulos). `multiIf` de normalização de marca citado em DADOS-FINANCE.md §10 é do fct_kpi_daily/fct_sigap_saldo_diario (cash-balance, Fase 07) — não se aplica aqui, porque as 3 queries desta fase filtram `brand = {marca:String}`/`toString(client_id)` diretamente, sem agrupar por marca.",
+        "O grep literal do script orgânico do próprio FASE-11.md (`grep -n \"source_system\" ...`) casava com o comentário JSDoc que EXPLICA por que source_system não é filtrado — mesma categoria de defeito de template já documentada nas Fases 01/03/04/05/08/10. Restringido às linhas dentro das template strings SQL (excluindo linhas de comentário `*`).",
+        "Mesmo gotcha do Jest 30 (--verbose não lista testes que passaram) aplicado preventivamente ao escrever o script orgânico desta vez (--json --outputFile + jq), sem precisar redescobrir o defeito.",
+        "Caso real de R$5.755,00 (2 saques da Ultra pedidos 23:53, liberados 00:05 do dia seguinte) coberto por teste dedicado que verifica a string literal de cada query (`toContain`/`not.toContain`), não só o comportamento de mapeamento — o risco real está na query SQL usar o campo errado, não na função toMovement."
+      ],
       "criteria": {
         "total": 14,
-        "passed": 0
+        "passed": 14
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 40195,
+      "costUsd": 8.4792,
       "estimatedCostUsd": 60,
       "files": [
         "src/modules/finance-reconciliation/infrastructure/clickhouse/platform-movements.service.ts",
         "src/modules/finance-reconciliation/infrastructure/clickhouse/correction-search.service.ts",
-        "src/modules/finance-reconciliation/infrastructure/clickhouse/platform-movements.service.spec.ts"
+        "src/modules/finance-reconciliation/infrastructure/clickhouse/platform-movements.service.spec.ts",
+        "src/modules/finance-reconciliation/infrastructure/clickhouse/correction-search.service.spec.ts",
+        "src/modules/finance-reconciliation/reconciliation.module.ts",
+        "scripts/clickhouse-conciliacao/FASE-11-TESTE-ORGANICO.sh"
       ]
     },
     {

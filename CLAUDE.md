@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 11 — ClickHouse da Conciliação (movimentos + busca de correção).**
+**Fase atual: 12 — Trio: movimentos por bisseção + regressão.**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -56,7 +56,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 08 | Identidade da plataforma (/auth/me) + BrandAccessService | ✅ concluída |
 | 09 | Balanço de Caixa — use-cases + services + controller | ✅ concluída |
 | 10 | Persistência da Conciliação (repositório) | ✅ concluída |
-| 11 | ClickHouse da Conciliação (movimentos + busca de correção) | pending |
+| 11 | ClickHouse da Conciliação (movimentos + busca de correção) | ✅ concluída |
 | 12 | Trio — movimentos por bisseção + regressão | pending |
 | 13 | Conciliação — use-cases núcleo + controller | pending |
 | 14 | Conciliação — evidência de correção de saldo | pending |
@@ -341,6 +341,24 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   da entidade já é `varchar`, então não há perda de garantia no banco; a validação contra o catálogo de
   marcas conhecidas (`BRANDS`) fica para o use-case da Fase 13, via `BrandAccessService` — mesmo padrão
   provisório já registrado nas Fases 01/02/06 para tipos que só existem de verdade numa fase posterior.
+- **Fase 11:** `platform-movements.service.ts`/`correction-search.service.ts` portados literalmente da
+  origem — a normalização de marca via `multiIf(brand = 'suprema', 'Suprema', ...)` citada em
+  `DADOS-FINANCE.md` §10 pertence a `fct_kpi_daily`/`fct_sigap_saldo_diario` (lidos por
+  `ClickHouseReadService` do `finance-cash-balance`, Fase 07), que agrupam por marca — não às 5 queries
+  desta fase, que filtram `brand = {marca:String}`/`toString(client_id)` diretamente e nunca agrupam.
+  Nenhuma inconsistência real: a nota de §10 é genérica ao mart, não a esta fase especificamente.
+- **Fase 11:** o script orgânico literal do próprio `FASE-11.md` tinha `grep -n "source_system" ...`
+  sem excluir comentários — casava com o JSDoc que **explica** por que `source_system` não é
+  filtrado (a prosa cita a palavra "source_system" ao justificar a ausência do filtro). Mesma
+  categoria de defeito de template já documentada nas Fases 01/03/04/05/08/10 (o script fornecido no
+  `FASE-*.md` não é confiável sem rodar contra a implementação real) — corrigido restringindo o grep
+  às linhas fora de comentário (`grep -v '^\s*[0-9]*: \?\*'`). O mesmo `grep` puro em código-fonte sem
+  filtrar comentário pode dar falso positivo sempre que a decisão de *não* fazer algo for documentada
+  citando o nome do próprio filtro evitado.
+- **Fase 11:** aplicado preventivamente o fix do Jest 30 (`--json --outputFile` + `jq` em vez de
+  `--verbose` + `grep`, já documentado nas Fases 01/03/05/08/10) ao escrever o script orgânico desta
+  fase, sem esperar o script literal do `FASE-11.md` falhar primeiro — mostra que vale revisar todo
+  `FASE-*.md` restante (12-17) por esse padrão antes de rodar o bloco de script fornecido nele.
 
 ## Convenções de teste
 
