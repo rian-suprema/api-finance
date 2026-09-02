@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-02T22:29:47.783Z"
+    "lastUpdated": "2026-09-02T23:09:53.322Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 14,
+    "completed": 15,
     "inProgress": 0,
-    "pending": 3,
+    "pending": 2,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 58,
-    "hoursRemaining": 14,
-    "percentComplete": 82.35,
-    "totalCostUsd": 158.44,
-    "projectedTotalCostUsd": 188.42
+    "hoursCompleted": 64,
+    "hoursRemaining": 8,
+    "percentComplete": 88.24,
+    "totalCostUsd": 175.03,
+    "projectedTotalCostUsd": 190.56
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 2848,
-    "totalOutputTokens": 1118887,
-    "totalCacheWriteTokens": 4738400,
-    "totalCacheReadTokens": 412931503,
-    "totalCostUsd": 158.44,
-    "projectedTotalCostUsd": 188.42,
-    "costCalibrationFactor": 0.2438,
+    "totalInputTokens": 3082,
+    "totalOutputTokens": 1200578,
+    "totalCacheWriteTokens": 4921017,
+    "totalCacheReadTokens": 461853288,
+    "totalCostUsd": 175.03,
+    "projectedTotalCostUsd": 190.56,
+    "costCalibrationFactor": 0.2465,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -109,10 +109,10 @@
         "cacheRead": 41128507
       },
       "48aa95d5-47a6-4a54-8e00-86ae9ced0758": {
-        "input": 226,
-        "output": 76242,
-        "cacheWrite": 280791,
-        "cacheRead": 24603220
+        "input": 460,
+        "output": 157933,
+        "cacheWrite": 463408,
+        "cacheRead": 73525005
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -678,37 +678,58 @@
     {
       "id": 15,
       "name": "Jobs — CronJob Helm + crons + 5 CLIs + RLS no caminho job",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 6,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-02",
+      "completedDate": "2026-09-02",
       "dependsOn": [
         9,
         13,
         14
       ],
       "description": "deploy/helm CronJob (substitui @Cron in-process pelo problema de replicaCount:2), 5 CLIs Node, runInTenantContext por marca no caminho job (defesa em profundidade)",
-      "notes": [],
+      "notes": [
+        "Dúvida arquitetural real (não suposição): habilitar RLS/FORCE nas tabelas do Finance no caminho job quebraria silenciosamente as 14 rotas HTTP das Fases 09/13/14, que não usam GUC nenhum. Protocolo de decisão aplicado: 3 opções apresentadas ao usuário via pergunta direta, escolhida a opção 1 (recomendada) — não habilitar RLS, defesa em profundidade via assertKnownBrand() nos 5 CLIs.",
+        "CLOSING_BALANCE_SOURCE (token do port da Fase 07) nunca tinha provider registrado — resolvido com { provide: CLOSING_BALANCE_SOURCE, useExisting: TrioPointInTimeBalanceSource } em cash-balance.module.ts, já que CaptureTrioClosingUseCase é o primeiro consumidor real.",
+        "Bug real pego antes de commitar: os 2 CLIs de exportação escrevem CSV em stdout por padrão (--out=-), mas o Logger do Nest (nível log) também escreve em stdout por padrão, poluindo o CSV. Corrigido desligando o nível log quando out === '-' (mantendo error/warn em stderr). A origem nunca teve esse problema porque sempre escrevia em arquivo.",
+        "helm não estava instalado no ambiente da sessão — instalado localmente em ~/.local/bin/helm (binário oficial v3.15.4, sem root) para rodar helm template no teste orgânico e na verificação adversarial.",
+        "RED confirmado genuinamente: script orgânico rodado antes de qualquer CLI/cronjob.yaml existir, falhando exatamente pela ausência desses arquivos (build passou, mas dist/cli/ e cronjob.yaml não existiam).",
+        "Invariantes de sessão (Haiku): TODOS APROVADOS — zero linhas de RLS/FORCE nas tabelas do Finance, zero linhas de 'npm run' dentro de src/cli/.",
+        "Verificação Adversarial de Aceite (sub-agente em contexto isolado, rodou e2e/lint/testes de verdade): CONFIRMADO. Rodou também o script da Fase 14 por diligência extra e viu 3/10 'falhas' — identificou corretamente que é estado persistente do Postgres local (docker compose) entre execuções manuais, não regressão de código; o e2e oficial com Testcontainers (36/36) é a regressão que vale.",
+        "Regressão e2e das Fases 09/13/14 (Testcontainers, Postgres efêmero): 36/36 verde depois do wiring desta fase — confirma que não habilitar RLS não quebrou nenhuma rota já testada."
+      ],
       "criteria": {
         "total": 15,
-        "passed": 0
+        "passed": 15
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 81691,
+      "costUsd": 16.5874,
       "estimatedCostUsd": 60,
       "files": [
+        "src/modules/finance-cash-balance/cash-balance.constants.ts",
+        "src/modules/finance-cash-balance/cash-balance.constants.spec.ts",
+        "src/modules/finance-cash-balance/cash-balance.module.ts",
         "src/modules/finance-cash-balance/domain/use-cases/capture-trio-closing.use-case.ts",
+        "src/modules/finance-cash-balance/domain/use-cases/capture-trio-closing.use-case.spec.ts",
         "src/modules/finance-cash-balance/domain/use-cases/import-balance-history.use-case.ts",
+        "src/modules/finance-cash-balance/domain/use-cases/import-balance-history.use-case.spec.ts",
         "src/cli/run-reconciliation.ts",
+        "src/cli/run-reconciliation.spec.ts",
         "src/cli/capture-trio-closing.ts",
+        "src/cli/capture-trio-closing.spec.ts",
         "src/cli/import-balance-history.ts",
+        "src/cli/import-balance-history.spec.ts",
         "src/cli/export-trio-statement.ts",
+        "src/cli/export-trio-statement.spec.ts",
         "src/cli/export-trio-transactions.ts",
+        "src/cli/export-trio-transactions.spec.ts",
         "deploy/helm/users-api/templates/cronjob.yaml",
         "deploy/helm/users-api/values.yaml",
-        "deploy/infra/requirements.yaml"
+        "scripts/jobs-financeiros/FASE-15-TESTE-ORGANICO.sh",
+        "scripts/jobs-financeiros/FASE-15-TESTE-ORGANICO.md",
+        "CLAUDE.md"
       ]
     },
     {

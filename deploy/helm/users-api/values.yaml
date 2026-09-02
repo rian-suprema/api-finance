@@ -85,6 +85,35 @@ jwtPublicKey:
   # Nome do item (data key) dentro do Secret que contém o PEM
   secretKey: public.pem
 
+# CronJobs do módulo Finance — substituem os `@Cron` in-process que a origem
+# tinha, eliminando a duplicação de trabalho contra a Trio que `replicaCount: 2`
+# causaria (ver docs/migracao-finance/INFRA-FINANCE.md §6 e CLAUDE.md item 3).
+# `schedule` em UTC, fixo (o CronJob do K8s não garante `timeZone` em todo
+# cluster) — sobrescrever por ambiente em values-<env>.yaml se o horário BRT
+# precisar mudar (ex.: retorno do horário de verão).
+cronjobs:
+  trioCapture:
+    enabled: true
+    # 00:03 BRT = 03:03 UTC (aproxima os 00:00:30 BRT do @Cron original).
+    schedule: '3 3 * * *'
+    backoffLimit: 2
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 250m, memory: 256Mi }
+  reconciliation:
+    enabled: true
+    # 04:00 BRT = 07:00 UTC.
+    schedule: '0 7 * * *'
+    backoffLimit: 2
+    terminationGracePeriodSeconds: 30
+    # Perfil diferente do Deployment: a varredura carrega em memória os
+    # lançamentos das 2 pontas das 3 marcas em paralelo — não medido ainda,
+    # chute mais seguro que o default do CRUD até medir uma execução real
+    # (ver INFRA-FINANCE.md §9.2).
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 500m, memory: 1Gi }
+
 # Tráfego Leste/Oeste: default-deny de ingress + allow explícito só para o
 # caminho do gateway. Postura do archetype: NASCE HABILITADA nos ambientes
 # (values-{dev,prod}) — nenhum outro pod abre conexão com este por padrão.

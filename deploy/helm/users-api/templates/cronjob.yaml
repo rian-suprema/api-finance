@@ -1,0 +1,128 @@
+{{/*
+CronJob do Kubernetes chamando os CLIs — substitui os `@Cron` in-process que a
+origem tinha dentro do processo da API. Com `replicaCount: 2`, um `@Cron`
+in-process faria as duas réplicas calcularem o mesmo resultado (a conciliação
+varre o extrato inteiro por marca, ~1.000 requisições cada) — a guarda de
+reentrância do use-case é um `Set` em memória do processo, não vê a outra
+réplica. Ver docs/migracao-finance/INFRA-FINANCE.md §6 (opção 1, recomendada).
+
+Fuso: o `CronJob` do Kubernetes não aceita `timeZone` de forma confiável em
+todo cluster (feature gate opcional antes da 1.27), então a expressão abaixo
+é em UTC, fixa. O Brasil não tem horário de verão desde 2019 — se voltar, os
+dois `schedule` abaixo precisam ser revisados (o código em runtime, que
+consulta o offset via `brtOffsetMinutes`, não tem esse problema; o manifesto
+tem).
+*/}}
+{{- if .Values.cronjobs.trioCapture.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "users-api.fullname" . }}-trio-capture
+  labels:
+    {{- include "users-api.labels" . | nindent 4 }}
+spec:
+  # 00:03 BRT = 03:03 UTC — aproxima os 00:00:30 BRT do `@Cron` original (o
+  # `CronJob` do K8s não agenda por segundo).
+  schedule: {{ .Values.cronjobs.trioCapture.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.cronjobs.trioCapture.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "users-api.selectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: trio-capture
+              image: '{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}'
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              command: ['node', 'dist/cli/capture-trio-closing.js']
+              resources:
+                {{- toYaml .Values.cronjobs.trioCapture.resources | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "users-api.fullname" . }}
+                {{- if .Values.existingSecret }}
+                - secretRef:
+                    name: {{ .Values.existingSecret }}
+                {{- end }}
+              {{- if .Values.jwtPublicKey.existingSecret }}
+              volumeMounts:
+                - name: sayplus-jwt-public-key
+                  mountPath: /etc/sayplus/jwt
+                  readOnly: true
+              {{- end }}
+          {{- if .Values.jwtPublicKey.existingSecret }}
+          volumes:
+            - name: sayplus-jwt-public-key
+              secret:
+                secretName: {{ .Values.jwtPublicKey.existingSecret }}
+                items:
+                  - key: {{ .Values.jwtPublicKey.secretKey }}
+                    path: public.pem
+          {{- end }}
+{{- end }}
+---
+{{- if .Values.cronjobs.reconciliation.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "users-api.fullname" . }}-reconciliation
+  labels:
+    {{- include "users-api.labels" . | nindent 4 }}
+spec:
+  # 04:00 BRT = 07:00 UTC.
+  schedule: {{ .Values.cronjobs.reconciliation.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.cronjobs.reconciliation.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "users-api.selectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          # A conciliação demora minutos (bisseção do extrato por marca) — um
+          # rolling update ou preempção não deve matar a varredura no meio.
+          terminationGracePeriodSeconds: {{ .Values.cronjobs.reconciliation.terminationGracePeriodSeconds }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: reconciliation
+              image: '{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}'
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              command: ['node', 'dist/cli/run-reconciliation.js']
+              resources:
+                {{- toYaml .Values.cronjobs.reconciliation.resources | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "users-api.fullname" . }}
+                {{- if .Values.existingSecret }}
+                - secretRef:
+                    name: {{ .Values.existingSecret }}
+                {{- end }}
+              {{- if .Values.jwtPublicKey.existingSecret }}
+              volumeMounts:
+                - name: sayplus-jwt-public-key
+                  mountPath: /etc/sayplus/jwt
+                  readOnly: true
+              {{- end }}
+          {{- if .Values.jwtPublicKey.existingSecret }}
+          volumes:
+            - name: sayplus-jwt-public-key
+              secret:
+                secretName: {{ .Values.jwtPublicKey.existingSecret }}
+                items:
+                  - key: {{ .Values.jwtPublicKey.secretKey }}
+                    path: public.pem
+          {{- end }}
+{{- end }}

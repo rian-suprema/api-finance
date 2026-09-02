@@ -66,6 +66,21 @@ export function findBrand(key: string): BrandConfig | undefined {
   return BRANDS.find((brand) => brand.key === key);
 }
 
+/**
+ * Defesa em profundidade do caminho job (Fase 15) — nenhum guard/RLS protege
+ * jobs e CLIs hoje, então este é o único ponto que impede uma marca fora do
+ * catálogo de chegar a uma escrita. Decisão do usuário entre 3 opções (ver
+ * CLAUDE.md item 5): não habilitar RLS/FORCE nas tabelas do Finance, porque
+ * quebraria silenciosamente as 14 rotas HTTP que não usam GUC nenhum — a
+ * defesa vira esta asserção de aplicação, não uma policy de banco.
+ */
+export function assertKnownBrand(key: string): BrandKey {
+  if (!(BRAND_KEYS as readonly string[]).includes(key)) {
+    throw new Error(`marca desconhecida: ${key}`);
+  }
+  return key as BrandKey;
+}
+
 export function findBank(key: string): BankConfig | undefined {
   return BANKS.find((bank) => bank.key === key);
 }

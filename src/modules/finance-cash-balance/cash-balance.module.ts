@@ -12,14 +12,18 @@ import { ClickHouseReadService } from './infrastructure/clickhouse/clickhouse-re
 import { CashBalanceRepository } from './infrastructure/cash-balance.repository';
 import { PlatformIdentityService } from './infrastructure/platform/platform-identity.service';
 import { TrioBankingClient } from './infrastructure/trio/trio-banking.client';
+import { TrioPointInTimeBalanceSource } from './infrastructure/trio/trio-point-in-time-balance.source';
 import { TrioClosingBalanceRepository } from './infrastructure/trio-closing-balance.repository';
+import { CLOSING_BALANCE_SOURCE } from './domain/ports/closing-balance-source.port';
 import { BrandAccessService } from './domain/services/brand-access.service';
 import { CashBalanceReadService } from './domain/services/cash-balance-read.service';
 import { CashBalanceRegistryService } from './domain/services/cash-balance-registry.service';
+import { CaptureTrioClosingUseCase } from './domain/use-cases/capture-trio-closing.use-case';
 import { ConfirmBankUseCase } from './domain/use-cases/confirm-bank.use-case';
 import { GetBanksStateUseCase } from './domain/use-cases/get-banks-state.use-case';
 import { GetHistoryUseCase } from './domain/use-cases/get-history.use-case';
 import { GetSummaryUseCase } from './domain/use-cases/get-summary.use-case';
+import { ImportBalanceHistoryUseCase } from './domain/use-cases/import-balance-history.use-case';
 import { RefreshTrioUseCase } from './domain/use-cases/refresh-trio.use-case';
 import { RegisterBrandUseCase } from './domain/use-cases/register-brand.use-case';
 import { ReopenBrandUseCase } from './domain/use-cases/reopen-brand.use-case';
@@ -63,6 +67,8 @@ import { CashBalanceController } from './presenters/controllers/cash-balance.con
     ClickHouseReadService,
     PlatformIdentityService,
     TrioBankingClient,
+    TrioPointInTimeBalanceSource,
+    { provide: CLOSING_BALANCE_SOURCE, useExisting: TrioPointInTimeBalanceSource },
     BrandAccessService,
     AuditInterceptor,
     GetSummaryUseCase,
@@ -72,6 +78,8 @@ import { CashBalanceController } from './presenters/controllers/cash-balance.con
     ConfirmBankUseCase,
     RegisterBrandUseCase,
     ReopenBrandUseCase,
+    CaptureTrioClosingUseCase,
+    ImportBalanceHistoryUseCase,
     CashBalanceReadService,
     CashBalanceRegistryService,
   ],
@@ -83,6 +91,8 @@ import { CashBalanceController } from './presenters/controllers/cash-balance.con
     TrioBankingClient,
     BrandAccessService,
     AuditInterceptor,
+    CaptureTrioClosingUseCase,
+    ImportBalanceHistoryUseCase,
   ],
 })
 export class CashBalanceModule {}

@@ -42,10 +42,11 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 15 — Jobs (CronJob Helm + crons + 5 CLIs + RLS no caminho job).**
+**Fase atual: 16 — Contrato do archetype (prefixo/Swagger/health/decimal).**
 
 > **Marco: as 14 rotas de negócio do Finance estão completas** (7 do balanço de caixa + 7 da
-> conciliação, incluindo as 2 de evidência de correção da Fase 14).
+> conciliação, incluindo as 2 de evidência de correção da Fase 14). O `CronJob` (Fase 15) substitui
+> os `@Cron` in-process que a origem tinha — nunca portados para este destino.
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -63,7 +64,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 12 | Trio — movimentos por bisseção + regressão | ✅ concluída |
 | 13 | Conciliação — use-cases núcleo + controller | ✅ concluída |
 | 14 | Conciliação — evidência de correção de saldo | ✅ concluída |
-| 15 | Jobs — CronJob Helm + crons + 5 CLIs + RLS no caminho job | pending |
+| 15 | Jobs — CronJob Helm + 5 CLIs + defesa `assertKnownBrand` (sem RLS) | ✅ concluída |
 | 16 | Contrato do archetype (prefixo/Swagger/health/decimal) | pending |
 | 17 | Fechamento — e2e completo, quality gates, cutover | pending |
 
@@ -166,6 +167,17 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
     `toCandidateView` (`search-corrections.use-case.ts`). Precedente: qualquer rota futura que
     precise "ver o mesmo que outra rota viu antes de agir sobre isso" injeta o use-case de leitura e
     chama `.execute()` com os mesmos parâmetros — nunca duplica a query só porque o efeito é outro.
+16. **RLS no caminho job — ✅ confirmado pelo usuário na PARADA da Fase 15 (2026-09-02), opção 1 das
+    3 apresentadas.** Fecha, com decisão explícita ao vivo, o que o item 5 já antecipava: nenhuma
+    tabela do Finance ganha `ENABLE`/`FORCE ROW LEVEL SECURITY`. A defesa em profundidade do caminho
+    job/CLI é `assertKnownBrand(key)` (`cash-balance.constants.ts`), chamada em `parseArgs` dos 5
+    CLIs **antes** de `NestFactory.createApplicationContext` resolver qualquer use-case — uma marca
+    fora do catálogo nunca chega perto de uma escrita. `CLOSING_BALANCE_SOURCE` (token do Ports &
+    Adapters da Fase 07, nunca provido até aqui) passou a resolver para `TrioPointInTimeBalanceSource`
+    em `cash-balance.module.ts` — só nesta fase ganhou um consumidor real (`CaptureTrioClosingUseCase`).
+    Precedente: qualquer policy de RLS futura nas tabelas do Finance é ADR novo, não reabertura
+    silenciosa desta decisão — precisaria vir com o interceptor HTTP equivalente (opção 2, nunca
+    implementada) para não quebrar as 14 rotas que hoje não usam GUC nenhum.
 
 ## Aprendizados críticos
 
@@ -478,6 +490,33 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   (`search-corrections.use-case.ts`, "Todo CPF..."). Reescrito para "Cada CPF..." — sexta ocorrência
   do mesmo gotcha; vale revisar todo comentário novo que comece frase com "Todo"/"Toda" antes de
   rodar lint.
+- **Fase 15:** `helm` não estava instalado no ambiente da sessão — instalado localmente em
+  `~/.local/bin/helm` (binário oficial, sem privilégio de root; `~/.local/bin` já estava no `PATH`
+  padrão do shell). Necessário antes de rodar `helm template` no teste orgânico e na verificação
+  adversarial. Vale checar `command -v helm` no início de qualquer fase futura que precise dele.
+- **Fase 15:** bug real pego antes de commitar, não pelo lint: os 2 CLIs de exportação (`export-trio-
+  statement.ts`, `export-trio-transactions.ts`) escrevem o CSV em `stdout` por padrão (`--out=-`,
+  decisão de INFRA-FINANCE.md §7), mas o `Logger` do Nest (nível `log`) também escreve em `stdout`
+  por padrão — misturaria linha de progresso com linha de CSV no mesmo redirecionamento
+  (`... > extrato.csv`). Corrigido desligando o nível `log` do `NestFactory.createApplicationContext`
+  quando `out === '-'` (mantendo `error`/`warn`, que vão para `stderr`). Qualquer CLI futuro que
+  escreva dado estruturado em `stdout` por padrão precisa do mesmo cuidado — a origem nunca teve esse
+  problema porque sempre escrevia em arquivo (`writeFileSync`), nunca em `stdout`.
+- **Fase 15:** `CLOSING_BALANCE_SOURCE` (token do port criado na Fase 07) nunca tinha sido provido em
+  nenhum módulo — `TrioPointInTimeBalanceSource` existia como classe, mas sem nenhum consumidor real
+  até `CaptureTrioClosingUseCase` (desta fase) precisar dele. Resolvido com
+  `{ provide: CLOSING_BALANCE_SOURCE, useExisting: TrioPointInTimeBalanceSource }` em
+  `cash-balance.module.ts`. Mesma categoria de pendência já documentada na Fase 07 ("fica para a
+  Fase 15/CronJob").
+- **Fase 15:** ao rodar `scripts/conciliacao-correcoes/FASE-14-TESTE-ORGANICO.sh` de novo como
+  regressão manual (fora do fluxo oficial), 3 dos 10 testes "falharam" — não por regressão de código,
+  mas porque o Postgres local via `docker compose` é **persistente** entre execuções, e uma corrida
+  anterior já tinha resolvido (`apply`) as 2 pendências exatas do golden dataset; a segunda corrida
+  via o resultado idempotente correto (`searchedCount:2`, `resolvedCount:0`), não o estado "fresco"
+  que o script assume. O teste oficial da regressão (`npm run test:e2e`, Testcontainers — Postgres
+  efêmero a cada run) passou 36/36 sem ressalva. Vale lembrar: scripts orgânicos com `curl` contra o
+  Postgres de desenvolvimento (`docker compose`) não são idempotentes entre execuções manuais — só o
+  e2e com Testcontainers garante estado limpo a cada rodada.
 
 ## Convenções de teste
 
