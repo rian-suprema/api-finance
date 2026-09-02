@@ -11,6 +11,7 @@ import { AuditInterceptor } from './infrastructure/audit.interceptor';
 import { ClickHouseReadService } from './infrastructure/clickhouse/clickhouse-read.service';
 import { CashBalanceRepository } from './infrastructure/cash-balance.repository';
 import { PlatformIdentityService } from './infrastructure/platform/platform-identity.service';
+import { TrioBankingClient } from './infrastructure/trio/trio-banking.client';
 import { TrioClosingBalanceRepository } from './infrastructure/trio-closing-balance.repository';
 import { BrandAccessService } from './domain/services/brand-access.service';
 import { CashBalanceReadService } from './domain/services/cash-balance-read.service';
@@ -25,9 +26,11 @@ import { ReopenBrandUseCase } from './domain/use-cases/reopen-brand.use-case';
 import { CashBalanceController } from './presenters/controllers/cash-balance.controller';
 
 /**
- * `BrandAccessService` é exportado para reuso pelo `ReconciliationModule`
- * (Fase 13) — colaboração entre módulos só via service exportado, nunca
- * import direto de arquivo de outro módulo.
+ * `BrandAccessService`/`TrioBankingClient` são exportados para reuso pelo
+ * `ReconciliationModule` (`TrioBankingClient` desde a Fase 12, para
+ * `TrioMovementsService`; `BrandAccessService` a partir da Fase 13) —
+ * colaboração entre módulos só via service exportado, nunca import direto de
+ * arquivo de outro módulo.
  */
 @Module({
   imports: [
@@ -46,6 +49,7 @@ import { CashBalanceController } from './presenters/controllers/cash-balance.con
     TrioClosingBalanceRepository,
     ClickHouseReadService,
     PlatformIdentityService,
+    TrioBankingClient,
     BrandAccessService,
     AuditInterceptor,
     GetSummaryUseCase,
@@ -62,6 +66,7 @@ import { CashBalanceController } from './presenters/controllers/cash-balance.con
     CashBalanceRepository,
     TrioClosingBalanceRepository,
     ClickHouseReadService,
+    TrioBankingClient,
     BrandAccessService,
   ],
 })

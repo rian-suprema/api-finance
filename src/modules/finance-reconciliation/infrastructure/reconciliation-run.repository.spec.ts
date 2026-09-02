@@ -1,12 +1,6 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { DataSource } from 'typeorm';
 
-import { CashBalanceBankEntry } from '../../finance-cash-balance/entities/cash-balance-bank-entry.entity';
-import { CashBalanceBrandSnapshot } from '../../finance-cash-balance/entities/cash-balance-brand-snapshot.entity';
-import { CashBalanceDaily } from '../../finance-cash-balance/entities/cash-balance-daily.entity';
-import { CashBalanceDay } from '../../finance-cash-balance/entities/cash-balance-day.entity';
-import { FinanceAuditLog } from '../../finance-cash-balance/entities/finance-audit-log.entity';
-import { TrioClosingBalance } from '../../finance-cash-balance/entities/trio-closing-balance.entity';
 import { FinanceInitialSchema1788210289000 } from '../../../database/migrations/1788210289000-FinanceInitialSchema';
 import { ReconciliationItem } from '../entities/reconciliation-item.entity';
 import { ReconciliationRun } from '../entities/reconciliation-run.entity';
@@ -30,16 +24,11 @@ describe('ReconciliationRunRepository (Postgres real via testcontainers)', () =>
       username: postgres.getUsername(),
       password: postgres.getPassword(),
       database: postgres.getDatabase(),
-      entities: [
-        CashBalanceDay,
-        CashBalanceDaily,
-        CashBalanceBankEntry,
-        CashBalanceBrandSnapshot,
-        TrioClosingBalance,
-        FinanceAuditLog,
-        ReconciliationRun,
-        ReconciliationItem,
-      ],
+      // A migration é SQL explícito (não depende de metadata de entidade) — só as
+      // entidades deste módulo entram aqui. Registrar entidades de
+      // finance-cash-balance seria import direto de outro módulo sem
+      // necessidade real (decisão 10 do CLAUDE.md).
+      entities: [ReconciliationRun, ReconciliationItem],
       migrations: [FinanceInitialSchema1788210289000],
     });
     await dataSource.initialize();

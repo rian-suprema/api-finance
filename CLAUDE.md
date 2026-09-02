@@ -42,7 +42,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 12 — Trio: movimentos por bisseção + regressão.**
+**Fase atual: 13 — Conciliação: use-cases núcleo + controller.**
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -57,7 +57,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 09 | Balanço de Caixa — use-cases + services + controller | ✅ concluída |
 | 10 | Persistência da Conciliação (repositório) | ✅ concluída |
 | 11 | ClickHouse da Conciliação (movimentos + busca de correção) | ✅ concluída |
-| 12 | Trio — movimentos por bisseção + regressão | pending |
+| 12 | Trio — movimentos por bisseção + regressão | ✅ concluída |
 | 13 | Conciliação — use-cases núcleo + controller | pending |
 | 14 | Conciliação — evidência de correção de saldo | pending |
 | 15 | Jobs — CronJob Helm + crons + 5 CLIs + RLS no caminho job | pending |
@@ -126,6 +126,15 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
     por fora" + "escrever um snapshot calculado a partir dele" precisa do mesmo padrão (ler sob lock,
     dentro da mesma transação da escrita) — ler fora e só depois abrir a transação de escrita é
     exatamente a classe de bug (*lost update*) que este padrão fecha.
+12. **`ReconciliationModule` importa `CashBalanceModule` para reusar `TrioBankingClient` — decisão da
+    Fase 12, primeira dependência real entre os 2 módulos de negócio do Finance.** `TrioBankingClient`
+    (cliente da bisseção, Fase 06) foi adicionado a `providers`+`exports` de `cash-balance.module.ts`
+    (não estava em nenhum dos dois antes — nenhum use-case do balanço de caixa precisava injetá-lo
+    diretamente até aqui). `reconciliation.module.ts` importa `CashBalanceModule` nos `imports` e usa a
+    classe exportada — nunca duplica o cliente Trio nem a lógica de bisseção. Precedente: qualquer
+    reuso futuro entre os dois módulos de negócio segue o mesmo padrão (provider exportado + módulo
+    importado), nunca import direto de arquivo interno do outro módulo (entidade, repositório,
+    use-case) — só de uma classe que o `exports:` do módulo alvo declara explicitamente.
 
 ## Aprendizados críticos
 
@@ -359,6 +368,28 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   `--verbose` + `grep`, já documentado nas Fases 01/03/05/08/10) ao escrever o script orgânico desta
   fase, sem esperar o script literal do `FASE-11.md` falhar primeiro — mostra que vale revisar todo
   `FASE-*.md` restante (12-17) por esse padrão antes de rodar o bloco de script fornecido nele.
+- **Fase 12:** o Pre-flight (Haiku) confirmou um bloqueio real além do que o próprio `FASE-12.md`
+  já antecipava: `TrioBankingClient` não estava nem em `providers` nem em `exports` de
+  `cash-balance.module.ts` (nenhum use-case do balanço de caixa precisava injetá-lo diretamente até
+  esta fase — só `TrioPointInTimeBalanceSource`, que também não é provider de nenhum módulo ainda,
+  fica para a Fase 15/CronJob). Resolvido com a opção (a) já recomendada no próprio plano: adicionar
+  `TrioBankingClient` a `providers`+`exports`. Ver decisão 12.
+- **Fase 12:** a mesma invariante de sessão (Haiku, sobre import cruzado entre módulos) encontrou uma
+  violação real deixada pela Fase 10: `reconciliation-run.repository.spec.ts`/
+  `reconciliation-item.repository.spec.ts` importavam as 6 entidades de
+  `finance-cash-balance/entities/**` só para popular o array `entities: [...]` do `DataSource` de
+  teste (Testcontainers) — nenhuma é usada de fato, porque a migration `FinanceInitialSchema` é SQL
+  explícito (`queryRunner.query`), não depende de metadata de entidade nenhuma para rodar. Corrigido
+  restringindo `entities: [...]` às 2 entidades do próprio módulo (`ReconciliationRun`,
+  `ReconciliationItem`). Precedente para qualquer spec futuro com Testcontainers cobrindo uma
+  migration compartilhada entre módulos: registrar só as entidades que o teste efetivamente toca,
+  nunca copiar a lista inteira de outro módulo por conveniência/cópia do padrão de um spec vizinho.
+- **Fase 12:** `TrioMovementsService.accountIdFor` precisa repassar `brand: string` (decisão das Fases
+  10/11) para `TrioBankingClient.accountIdFor(brand: BrandKey)`, que exige o tipo mais estrito —
+  resolvido com cast estrutural (`brand as Parameters<TrioBankingClient['accountIdFor']>[0]`) em vez
+  de importar o tipo `BrandKey` de `cash-balance.constants` só para o cast. Vale como padrão sempre
+  que uma chamada cruzada de módulo precisar de um tipo mais estrito do lado importado: preferir
+  derivar o tipo estruturalmente da própria assinatura da função a importar o tipo nominal.
 
 ## Convenções de teste
 
