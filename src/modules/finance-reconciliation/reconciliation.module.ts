@@ -9,11 +9,14 @@ import { PlatformMovementsService } from './infrastructure/clickhouse/platform-m
 import { ReconciliationItemRepository } from './infrastructure/reconciliation-item.repository';
 import { ReconciliationRunRepository } from './infrastructure/reconciliation-run.repository';
 import { TrioMovementsService } from './infrastructure/trio/trio-movements.service';
+import { CorrectionEvidenceService } from './domain/services/correction-evidence.service';
 import { ReconciliationService } from './domain/services/reconciliation.service';
+import { ApplyCorrectionMatchesUseCase } from './domain/use-cases/apply-correction-matches.use-case';
 import { GetReconciliationHistoryUseCase } from './domain/use-cases/get-reconciliation-history.use-case';
 import { GetReconciliationUseCase } from './domain/use-cases/get-reconciliation.use-case';
 import { ResolveItemUseCase } from './domain/use-cases/resolve-item.use-case';
 import { RunReconciliationUseCase } from './domain/use-cases/run-reconciliation.use-case';
+import { SearchCorrectionsUseCase } from './domain/use-cases/search-corrections.use-case';
 import { ReconciliationController } from './presenters/controllers/reconciliation.controller';
 
 /**
@@ -39,6 +42,9 @@ import { ReconciliationController } from './presenters/controllers/reconciliatio
     GetReconciliationHistoryUseCase,
     ResolveItemUseCase,
     ReconciliationService,
+    SearchCorrectionsUseCase,
+    ApplyCorrectionMatchesUseCase,
+    CorrectionEvidenceService,
   ],
   exports: [
     ReconciliationRunRepository,

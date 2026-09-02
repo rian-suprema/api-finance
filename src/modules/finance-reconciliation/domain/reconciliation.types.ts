@@ -207,3 +207,71 @@ export interface ReconciliationHistoryResult {
   resolvedCount: number;
   allReconciled: boolean;
 }
+
+/** Uma correção do candidato, como a tela exibe (valor em reais, não centavos). */
+export interface CorrectionEntryView {
+  correctionId: string;
+  brand: string;
+  clientId: string;
+  correctionDate: string;
+  occurredAt: string | null;
+  amount: number;
+}
+
+export interface CorrectionCandidateView {
+  confidence: CorrectionConfidence;
+  /** Soma das correções do candidato. */
+  amount: number;
+  /** `amount − valor da pendência`. Zero em tudo que não é `PARTIAL`. */
+  difference: number;
+  /**
+   * true quando o candidato fecha no centavo — é o que autoriza baixa
+   * automática (rota `apply`). `PARTIAL` é sempre false.
+   */
+  exact: boolean;
+  /**
+   * Nota de tratamento pronta. A tela usa como rascunho editável; a baixa em
+   * lote grava exatamente este texto. Fonte única em `domain/correction-note.ts`.
+   */
+  note: string;
+  corrections: CorrectionEntryView[];
+}
+
+export interface CorrectionEvidenceView {
+  itemId: number;
+  /**
+   * false quando o CPF da contraparte não pôde ser ligado a nenhum
+   * `client_id`. Nesse caso `candidates` sai vazio — sem identidade não há
+   * busca, e casar só por valor produz falso positivo.
+   */
+  clientResolved: boolean;
+  /** Ordenados por confiança. Evidência: nada dá baixa sozinho. */
+  candidates: CorrectionCandidateView[];
+}
+
+export interface CorrectionSearchView {
+  referenceDate: string;
+  brand: string;
+  /** Janela consultada, inclusiva nas duas pontas. */
+  from: string;
+  to: string;
+  /** Pendências consultadas: abertas, do lado do banco, de saque. */
+  searchedCount: number;
+  withEvidenceCount: number;
+  /** Pendências cujo CPF não existe como chave PIX em nenhum saque do mart. */
+  withoutClientCount: number;
+  items: CorrectionEvidenceView[];
+}
+
+export interface CorrectionApplyView {
+  referenceDate: string;
+  brand: string;
+  /** Pendências consultadas: abertas, do lado do banco, de saque. */
+  searchedCount: number;
+  /** Quantas tinham candidato exato e receberam baixa nesta chamada. */
+  resolvedCount: number;
+  /** Tinham candidato, mas com valor divergente — seguem abertas de propósito. */
+  partialCount: number;
+  /** Sem candidato nenhum: jogador não identificado ou sem correção na janela. */
+  withoutCandidateCount: number;
+}

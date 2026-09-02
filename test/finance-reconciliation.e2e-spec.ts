@@ -84,6 +84,38 @@ interface ItemRow {
   note: string | null;
 }
 
+interface CorrectionCandidateBody {
+  confidence: string;
+  amount: number;
+  difference: number;
+  exact: boolean;
+  note: string;
+}
+
+interface CorrectionEvidenceBody {
+  itemId: number;
+  clientResolved: boolean;
+  candidates: CorrectionCandidateBody[];
+}
+
+interface CorrectionSearchBody {
+  referenceDate: string;
+  brand: string;
+  searchedCount: number;
+  withEvidenceCount: number;
+  withoutClientCount: number;
+  items: CorrectionEvidenceBody[];
+}
+
+interface CorrectionApplyBody {
+  referenceDate: string;
+  brand: string;
+  searchedCount: number;
+  resolvedCount: number;
+  partialCount: number;
+  withoutCandidateCount: number;
+}
+
 async function pingStub(url: string): Promise<void> {
   try {
     await fetch(url, { signal: AbortSignal.timeout(2000) });
@@ -505,6 +537,102 @@ describe('Finance — Conciliação Bancária (e2e)', () => {
         .post(`${prefix}/reconciliation/items/${id}/reopen`)
         .set('Authorization', bearer);
       expect(res.status).toBe(403);
+    });
+  });
+
+  /**
+   * As 4 pendências de saque do lado do banco, com CPF, do golden dataset
+   * (`trio-man-1..4` em `finance-dev-stubs.js`): FABIO (45,00, exata via ponte
+   * pix_key), GISELE (80,00, evidência parcial — correção de 30,00), HELIO
+   * (15,00, CPF sem client_id conhecido) e IVONE (90,00, exata via coluna
+   * `cpf` da própria correção, sem ponte). Nenhum teste anterior neste arquivo
+   * toca `side=BANK, flow=WITHDRAWAL` — os 4 chegam aqui intactos.
+   */
+  describe('GET /reconciliation/:brand/corrections e POST .../apply (cenário 14)', () => {
+    it('marca sem pendência candidata → 200, searchedCount:0', async () => {
+      const res = await api()
+        .get(`${prefix}/reconciliation/ultra/corrections?date=${GOLDEN_DATE}`)
+        .set('Authorization', bearer);
+      const body = res.body as CorrectionSearchBody;
+
+      expect(res.status).toBe(200);
+      expect(body.searchedCount).toBe(0);
+      expect(body.items).toEqual([]);
+    });
+
+    it('suprema: 4 pendências candidatas, com os 4 diagnósticos do golden dataset', async () => {
+      const res = await api()
+        .get(`${prefix}/reconciliation/suprema/corrections?date=${GOLDEN_DATE}`)
+        .set('Authorization', bearer);
+      const body = res.body as CorrectionSearchBody;
+
+      expect(res.status).toBe(200);
+      expect(body.referenceDate).toBe(GOLDEN_DATE);
+      expect(body.brand).toBe('suprema');
+      expect(body.searchedCount).toBe(4);
+      expect(body.withEvidenceCount).toBe(3);
+      expect(body.withoutClientCount).toBe(1);
+
+      const withoutClient = body.items.filter((item) => !item.clientResolved);
+      expect(withoutClient).toHaveLength(1);
+      expect(withoutClient[0].candidates).toEqual([]);
+
+      const exact = body.items.filter((item) => item.candidates[0]?.exact === true);
+      expect(exact).toHaveLength(2);
+      for (const item of exact) {
+        expect(item.candidates[0].confidence).toBe('EXACT_SAME_BRAND');
+        expect(item.candidates[0].difference).toBe(0);
+      }
+
+      const partial = body.items.filter((item) => item.candidates[0]?.confidence === 'PARTIAL');
+      expect(partial).toHaveLength(1);
+      expect(partial[0].candidates[0].exact).toBe(false);
+      expect(partial[0].candidates[0].note).toContain('Conferir:');
+    });
+
+    it('apply: dá baixa nos 2 exatos, mantém o PARTIAL aberto, autor é o sub do JWT', async () => {
+      const res = await api()
+        .post(`${prefix}/reconciliation/suprema/corrections/apply?date=${GOLDEN_DATE}`)
+        .set('Authorization', bearer)
+        .send({ date: GOLDEN_DATE });
+      const body = res.body as CorrectionApplyBody;
+
+      expect(res.status).toBe(201);
+      expect(body.searchedCount).toBe(4);
+      expect(body.resolvedCount).toBe(2);
+      expect(body.partialCount).toBe(1);
+      expect(body.withoutCandidateCount).toBe(1);
+
+      const openWithdrawals = await dataSource.query<{ count: string }[]>(
+        `SELECT COUNT(*) FROM reconciliation_items
+         WHERE reference_date = $1 AND brand = 'suprema' AND side = 'BANK' AND flow = 'WITHDRAWAL'
+           AND status = 'OPEN' AND counterparty_tax_number IS NOT NULL`,
+        [GOLDEN_DATE],
+      );
+      // As 4 candidatas menos as 2 exatas: GISELE (PARTIAL) e HELIO (sem candidato) seguem OPEN.
+      expect(Number(openWithdrawals[0].count)).toBe(2);
+
+      // FABIO (45,00) e IVONE (90,00) são os 2 exatos — os únicos com `amount` nesses
+      // valores no lado BANK/WITHDRAWAL. saq-2/saq-3 (estornos, resolved_by='sistema')
+      // têm outros valores, então não entram nesta contagem.
+      const resolvedByOperator = await dataSource.query<{ count: string }[]>(
+        `SELECT COUNT(*) FROM reconciliation_items
+         WHERE reference_date = $1 AND brand = 'suprema' AND side = 'BANK' AND flow = 'WITHDRAWAL'
+           AND status = 'RESOLVED' AND amount IN (45, 90) AND resolved_by = 'user-test-1'`,
+        [GOLDEN_DATE],
+      );
+      expect(Number(resolvedByOperator[0].count)).toBe(2);
+    });
+
+    it('segunda chamada de apply é idempotente: resolvedCount:0, nota humana preservada', async () => {
+      const res = await api()
+        .post(`${prefix}/reconciliation/suprema/corrections/apply?date=${GOLDEN_DATE}`)
+        .set('Authorization', bearer)
+        .send({ date: GOLDEN_DATE });
+      const body = res.body as CorrectionApplyBody;
+
+      expect(res.status).toBe(201);
+      expect(body.resolvedCount).toBe(0);
     });
   });
 });

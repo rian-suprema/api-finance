@@ -12,9 +12,22 @@ describe('ReconciliationController', () => {
     ...overrides,
   });
 
+  const buildCorrectionEvidence = (overrides: Record<string, unknown> = {}) => ({
+    search: jest
+      .fn()
+      .mockResolvedValue({ referenceDate: '2026-06-15', brand: 'suprema', items: [] }),
+    apply: jest
+      .fn()
+      .mockResolvedValue({ referenceDate: '2026-06-15', brand: 'suprema', resolvedCount: 0 }),
+    ...overrides,
+  });
+
   it('GET / delega authorization + date resolvidos da query', async () => {
     const service = buildService();
-    const controller = new ReconciliationController(service as never);
+    const controller = new ReconciliationController(
+      service as never,
+      buildCorrectionEvidence() as never,
+    );
 
     await controller.get(AUTH, { date: '2026-06-15' });
 
@@ -23,7 +36,10 @@ describe('ReconciliationController', () => {
 
   it('GET /history delega authorization + from/to da query', async () => {
     const service = buildService();
-    const controller = new ReconciliationController(service as never);
+    const controller = new ReconciliationController(
+      service as never,
+      buildCorrectionEvidence() as never,
+    );
 
     await controller.history(AUTH, { from: '2026-06-01', to: '2026-06-15' });
 
@@ -32,7 +48,10 @@ describe('ReconciliationController', () => {
 
   it('POST /run delega authorization + date do corpo', async () => {
     const service = buildService();
-    const controller = new ReconciliationController(service as never);
+    const controller = new ReconciliationController(
+      service as never,
+      buildCorrectionEvidence() as never,
+    );
 
     await controller.run(AUTH, { date: '2026-06-15' });
 
@@ -41,7 +60,10 @@ describe('ReconciliationController', () => {
 
   it('POST /items/:id/resolve delega authorization + sub do JWT + id + nota', async () => {
     const service = buildService();
-    const controller = new ReconciliationController(service as never);
+    const controller = new ReconciliationController(
+      service as never,
+      buildCorrectionEvidence() as never,
+    );
 
     await controller.resolve(
       AUTH,
@@ -60,10 +82,42 @@ describe('ReconciliationController', () => {
 
   it('POST /items/:id/reopen delega authorization + id', async () => {
     const service = buildService();
-    const controller = new ReconciliationController(service as never);
+    const controller = new ReconciliationController(
+      service as never,
+      buildCorrectionEvidence() as never,
+    );
 
     await controller.reopen(AUTH, 42);
 
     expect(service.reopen).toHaveBeenCalledWith(AUTH, 42);
+  });
+
+  it('GET /:brand/corrections delega authorization + brand + date', async () => {
+    const correctionEvidence = buildCorrectionEvidence();
+    const controller = new ReconciliationController(
+      buildService() as never,
+      correctionEvidence as never,
+    );
+
+    await controller.corrections(AUTH, 'suprema', { date: '2026-06-15' });
+
+    expect(correctionEvidence.search).toHaveBeenCalledWith(AUTH, 'suprema', '2026-06-15');
+  });
+
+  it('POST /:brand/corrections/apply delega authorization + sub do JWT + brand + date', async () => {
+    const correctionEvidence = buildCorrectionEvidence();
+    const controller = new ReconciliationController(
+      buildService() as never,
+      correctionEvidence as never,
+    );
+
+    await controller.applyCorrections(
+      AUTH,
+      { sub: 'user-1', email: 'a@b.com', tenantId: 't1', permissions: [] },
+      'suprema',
+      { date: '2026-06-15' },
+    );
+
+    expect(correctionEvidence.apply).toHaveBeenCalledWith(AUTH, 'suprema', 'user-1', '2026-06-15');
   });
 });

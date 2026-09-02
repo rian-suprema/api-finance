@@ -17,8 +17,10 @@ import type { JwtPayload } from '../../../../auth/jwt-payload.interface';
 import { FINANCE_RECONCILIATION } from '../../../../auth/permissions.constants';
 import { Permissions } from '../../../../auth/permissions.decorator';
 import { AuditInterceptor } from '../../../finance-cash-balance/infrastructure/audit.interceptor';
+import { CorrectionEvidenceService } from '../../domain/services/correction-evidence.service';
 import { ReconciliationService } from '../../domain/services/reconciliation.service';
 import {
+  ApplyCorrectionsDto,
   ReconciliationHistoryQueryDto,
   ReconciliationQueryDto,
   ResolveItemDto,
@@ -30,7 +32,10 @@ import {
 @Controller('reconciliation')
 @UseInterceptors(AuditInterceptor)
 export class ReconciliationController {
-  constructor(private readonly service: ReconciliationService) {}
+  constructor(
+    private readonly service: ReconciliationService,
+    private readonly correctionEvidence: CorrectionEvidenceService,
+  ) {}
 
   @Get()
   @Permissions(FINANCE_RECONCILIATION.READ)
@@ -62,6 +67,52 @@ export class ReconciliationController {
   @ApiResponse({ status: 503, description: '/auth/me indisponível' })
   run(@AuthToken() authorization: string, @Body() dto: RunReconciliationDto) {
     return this.service.run(authorization, dto.date);
+  }
+
+  @Get(':brand/corrections')
+  @Permissions(FINANCE_RECONCILIATION.READ)
+  @ApiOperation({
+    summary:
+      'Busca a correção de saldo que explica um pagamento manual — jogador autoexcluído/bloqueado ' +
+      'que não consegue sacar pela plataforma e recebe direto pela conta do banco. Só leitura, não dá baixa.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pendências de saque candidatas, com os candidatos de correção',
+  })
+  @ApiResponse({ status: 400, description: 'Marca não reconhecida ou data inválida' })
+  @ApiResponse({ status: 403, description: 'Usuário sem acesso a esta marca' })
+  @ApiResponse({ status: 503, description: 'Integração com o data warehouse não configurada' })
+  corrections(
+    @AuthToken() authorization: string,
+    @Param('brand') brand: string,
+    @Query() query: ReconciliationQueryDto,
+  ) {
+    return this.correctionEvidence.search(authorization, brand, query.date);
+  }
+
+  @Post(':brand/corrections/apply')
+  @HttpCode(201)
+  @Permissions(FINANCE_RECONCILIATION.RESOLVE)
+  @ApiOperation({
+    summary:
+      'Dá baixa automática nas pendências cuja correção de saldo fecha no centavo — reusa exatamente ' +
+      'a mesma busca do GET .../corrections, nunca outro critério.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Resumo da baixa: quantas resolvidas, parciais e sem candidato',
+  })
+  @ApiResponse({ status: 400, description: 'Marca não reconhecida ou data inválida' })
+  @ApiResponse({ status: 403, description: 'Usuário sem acesso a esta marca' })
+  @ApiResponse({ status: 503, description: 'Integração com o data warehouse não configurada' })
+  applyCorrections(
+    @AuthToken() authorization: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('brand') brand: string,
+    @Body() dto: ApplyCorrectionsDto,
+  ) {
+    return this.correctionEvidence.apply(authorization, brand, user.sub, dto.date);
   }
 
   @Post('items/:id/resolve')

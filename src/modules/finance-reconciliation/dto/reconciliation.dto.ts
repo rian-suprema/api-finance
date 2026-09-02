@@ -43,6 +43,14 @@ export class RunReconciliationDto {
   date?: string;
 }
 
+export class ApplyCorrectionsDto {
+  @ApiPropertyOptional({ description: 'Data de referência (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  @Matches(ISO_DATE, { message: 'date deve estar no formato YYYY-MM-DD' })
+  date?: string;
+}
+
 export class ResolveItemDto {
   @ApiProperty({
     description: 'Justificativa do porquê o lançamento não tem par — registro contábil.',

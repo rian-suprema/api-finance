@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-02T21:36:52.916Z"
+    "lastUpdated": "2026-09-02T22:29:47.783Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 13,
+    "completed": 14,
     "inProgress": 0,
-    "pending": 4,
+    "pending": 3,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 54,
-    "hoursRemaining": 18,
-    "percentComplete": 76.47,
-    "totalCostUsd": 148.86,
-    "projectedTotalCostUsd": 191.15
+    "hoursCompleted": 58,
+    "hoursRemaining": 14,
+    "percentComplete": 82.35,
+    "totalCostUsd": 158.44,
+    "projectedTotalCostUsd": 188.42
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 2622,
-    "totalOutputTokens": 1042645,
-    "totalCacheWriteTokens": 4457609,
-    "totalCacheReadTokens": 388328283,
-    "totalCostUsd": 148.86,
-    "projectedTotalCostUsd": 191.15,
-    "costCalibrationFactor": 0.2473,
+    "totalInputTokens": 2848,
+    "totalOutputTokens": 1118887,
+    "totalCacheWriteTokens": 4738400,
+    "totalCacheReadTokens": 412931503,
+    "totalCostUsd": 158.44,
+    "projectedTotalCostUsd": 188.42,
+    "costCalibrationFactor": 0.2438,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -107,6 +107,12 @@
         "output": 156049,
         "cacheWrite": 625402,
         "cacheRead": 41128507
+      },
+      "48aa95d5-47a6-4a54-8e00-86ae9ced0758": {
+        "input": 226,
+        "output": 76242,
+        "cacheWrite": 280791,
+        "cacheRead": 24603220
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -624,30 +630,49 @@
     {
       "id": 14,
       "name": "Conciliação — evidência de correção de saldo",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 4,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-02",
+      "completedDate": "2026-09-02",
       "dependsOn": [
         1,
         11,
         13
       ],
       "description": "search-corrections + apply-correction-matches use-cases + CorrectionEvidenceService + rotas 11,12 do controller",
-      "notes": [],
+      "notes": [
+        "Pre-flight (Haiku) sinalizou um possível BLOQUEADO de unidade (amount em reais vs amountCents) — falso positivo: a conversão (toCents) já existia no use-case escrito, o agente só não a tinha lido ainda. Confirmado lendo o código, sem alterar nada.",
+        "RED confirmado de forma decisiva (mesmo padrão das Fases 05/07): as 3 classes novas movidas para fora do repositório + as 4 edições revertidas via git stash, com o servidor de dev já no ar — GET .../corrections voltou a 404. Restaurado, voltou a 200 sem reiniciar o processo (hot-reload).",
+        "Verificação Adversarial de Aceite (sub-agente em contexto isolado) confirmou os 6 pontos de risco de negócio (PARTIAL nunca exato, apply reusa a mesma busca, nota vem do candidato, permissões não invertidas, resolvedBy nunca 'sistema') e apontou 1 lacuna pequena: nenhum teste exercitava literalmente o 503 do ClickHouse passando por ApplyCorrectionMatchesUseCase/controller (a propagação é estrutural, sem try/catch, mas sem teste dedicado). Fechada com 1 teste adicional em apply-correction-matches.use-case.spec.ts antes do commit.",
+        "Invariantes de sessão (Haiku): TODOS APROVADOS — reuso de SearchCorrectionsUseCase confirmado por linha de código, e isExact() nunca marca PARTIAL como exato.",
+        "sonarjs/todo-tag deu falso positivo de novo (mesma causa das Fases 03/04): comentário novo começando com 'Todo CPF...' em português. Reescrito para 'Cada CPF...'.",
+        "Golden dataset dos 4 débitos manuais (trio-man-1..4 em finance-dev-stubs.js) já estava preparado no stub antes desta fase começar — um para cada caminho da busca (exato via ponte pix_key, evidência parcial, CPF não identificável, exato via coluna cpf direta). Números travados no e2e: searchedCount=4, resolvedCount=2, partialCount=1, withoutCandidateCount=1."
+      ],
       "criteria": {
-        "total": 15,
-        "passed": 0
+        "total": 17,
+        "passed": 17
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 76242,
+      "costUsd": 9.5782,
       "estimatedCostUsd": 48,
       "files": [
         "src/modules/finance-reconciliation/domain/use-cases/search-corrections.use-case.ts",
+        "src/modules/finance-reconciliation/domain/use-cases/search-corrections.use-case.spec.ts",
         "src/modules/finance-reconciliation/domain/use-cases/apply-correction-matches.use-case.ts",
-        "src/modules/finance-reconciliation/domain/services/correction-evidence.service.ts"
+        "src/modules/finance-reconciliation/domain/use-cases/apply-correction-matches.use-case.spec.ts",
+        "src/modules/finance-reconciliation/domain/services/correction-evidence.service.ts",
+        "src/modules/finance-reconciliation/domain/services/correction-evidence.service.spec.ts",
+        "src/modules/finance-reconciliation/domain/reconciliation.types.ts",
+        "src/modules/finance-reconciliation/dto/reconciliation.dto.ts",
+        "src/modules/finance-reconciliation/presenters/controllers/reconciliation.controller.ts",
+        "src/modules/finance-reconciliation/presenters/controllers/reconciliation.controller.spec.ts",
+        "src/modules/finance-reconciliation/reconciliation.module.ts",
+        "test/finance-reconciliation.e2e-spec.ts",
+        "scripts/conciliacao-correcoes/FASE-14-TESTE-ORGANICO.sh",
+        "scripts/conciliacao-correcoes/FASE-14-TESTE-ORGANICO.md",
+        "CLAUDE.md"
       ]
     },
     {

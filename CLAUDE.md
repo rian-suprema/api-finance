@@ -42,7 +42,10 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 [docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
 [docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
 
-**Fase atual: 14 — Conciliação: evidência de correção de saldo.**
+**Fase atual: 15 — Jobs (CronJob Helm + crons + 5 CLIs + RLS no caminho job).**
+
+> **Marco: as 14 rotas de negócio do Finance estão completas** (7 do balanço de caixa + 7 da
+> conciliação, incluindo as 2 de evidência de correção da Fase 14).
 
 | Fase | Nome | Status |
 |---|---|---|
@@ -59,7 +62,7 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
 | 11 | ClickHouse da Conciliação (movimentos + busca de correção) | ✅ concluída |
 | 12 | Trio — movimentos por bisseção + regressão | ✅ concluída |
 | 13 | Conciliação — use-cases núcleo + controller | ✅ concluída |
-| 14 | Conciliação — evidência de correção de saldo | pending |
+| 14 | Conciliação — evidência de correção de saldo | ✅ concluída |
 | 15 | Jobs — CronJob Helm + crons + 5 CLIs + RLS no caminho job | pending |
 | 16 | Contrato do archetype (prefixo/Swagger/health/decimal) | pending |
 | 17 | Fechamento — e2e completo, quality gates, cutover | pending |
@@ -152,6 +155,17 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
     qualquer enhancer (`@UseGuards`/`@UseInterceptors`/`@UsePipes` com classe) que dependa de um
     repositório TypeORM de outro módulo precisa desse padrão — exportar só a classe do enhancer não
     é suficiente se a dependência transitiva dela não estiver visível no módulo consumidor.
+15. **`CorrectionEvidenceService` é um serviço próprio, não um 6º método de `ReconciliationService`
+    — decisão da Fase 14.** A responsabilidade é outra: `ReconciliationService` serve o estado já
+    calculado da conciliação (leitura do Postgres), enquanto `CorrectionEvidenceService` consulta o
+    warehouse sob demanda para investigar uma pendência específica — mesma divisão que o balanço de
+    caixa já fazia entre `read`/`registry`. `SearchCorrectionsUseCase.execute` é o único ponto de
+    acesso ao ClickHouse desse fluxo; `ApplyCorrectionMatchesUseCase` **reusa** essa chamada (nunca
+    reimplementa a consulta) e filtra pelo **primeiro** candidato de cada pendência — nunca desce a
+    lista em busca de um exato mais abaixo. `PARTIAL` nunca é `exact: true`, por construção em
+    `toCandidateView` (`search-corrections.use-case.ts`). Precedente: qualquer rota futura que
+    precise "ver o mesmo que outra rota viu antes de agir sobre isso" injeta o use-case de leitura e
+    chama `.execute()` com os mesmos parâmetros — nunca duplica a query só porque o efeito é outro.
 
 ## Aprendizados críticos
 
@@ -440,6 +454,30 @@ Trilha em `feature/migracao-finance` — 17 fases, dashboard em
   a invariante `diferença (banco − plataforma) = crossover + pendências` nos 2 fluxos. Qualquer
   alteração futura no stub de conciliação precisa recalcular esses números à mão antes de mudar as
   asserções do e2e — não são arbitrários, vêm de leitura linha a linha do dataset.
+- **Fase 14:** o golden dataset dos 4 débitos manuais (`trio-man-1..4` em `finance-dev-stubs.js`,
+  lado `BANK`/`WITHDRAWAL`, com CPF) já estava preparado no stub **antes** desta fase começar — um
+  para cada caminho da busca de correção: FABIO (45,00, exato via ponte `pix_key`), GISELE (80,00,
+  evidência parcial — correção de 30,00), HELIO (15,00, CPF sem `client_id` conhecido) e IVONE
+  (90,00, exato via coluna `cpf` da própria correção, sem ponte). Números travados no e2e:
+  `searchedCount=4`, `withEvidenceCount=3`, `withoutClientCount=1`, `apply` resolve exatamente 2
+  (FABIO+IVONE), `partialCount=1` (GISELE), `withoutCandidateCount=1` (HELIO). Nenhum teste anterior
+  do arquivo toca `side=BANK, flow=WITHDRAWAL, counterparty_tax_number IS NOT NULL`, então os 4
+  chegam intactos até o describe desta fase — qualquer teste novo que precise desses mesmos itens
+  tem que continuar rodando depois dos blocos de `resolve`/`reopen` já existentes.
+- **Fase 14:** `CorrectionSearchItem.amount`/`ItemCounts.openAmount`/`RangeItemCounts.openAmount`
+  ficam em **reais**, não `amountCents`, na borda repositório↔use-case — inconsistente à primeira
+  vista com a convenção `amountCents` do domínio interno (`Movement`, `CorrectionEntry`), mas é o
+  mesmo padrão já usado por `StoredItem.amount` desde a Fase 10. A conversão para centavos
+  (`toCents`, em `search-corrections.use-case.ts`) acontece só na borda com `findCorrectionCandidates`
+  — mesma linha da origem (`toCents(item.amount)`). Um Pre-flight com Haiku sinalizou isso como
+  possível `BLOQUEADO` por não ter visto o use-case já escrito; confirmado como falso positivo depois
+  de ler o código — vale registrar como precedente: a conversão de unidade na borda repositório/view
+  é esperada e não é o mesmo bug que "esquecer de converter".
+- **Fase 14:** mesmo falso positivo do `sonarjs/todo-tag` já documentado nas Fases 03/04 ("todo" como
+  pronome em português casando com o token `TODO`) apareceu de novo num comentário novo
+  (`search-corrections.use-case.ts`, "Todo CPF..."). Reescrito para "Cada CPF..." — sexta ocorrência
+  do mesmo gotcha; vale revisar todo comentário novo que comece frase com "Todo"/"Toda" antes de
+  rodar lint.
 
 ## Convenções de teste
 
