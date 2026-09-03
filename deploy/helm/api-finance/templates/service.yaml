@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "users-api.fullname" . }}
+  name: {{ include "api-finance.fullname" . }}
   labels:
-    {{- include "users-api.labels" . | nindent 4 }}
+    {{- include "api-finance.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -12,4 +12,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "users-api.selectorLabels" . | nindent 4 }}
+    {{- include "api-finance.selectorLabels" . | nindent 4 }}

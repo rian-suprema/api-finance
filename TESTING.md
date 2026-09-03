@@ -1,8 +1,8 @@
-# Estratégia de testes — Archetype NestJS (variante simples)
+# Estratégia de testes — api-finance
 
-> A **estratégia** (2 níveis, fronteiras de mock, o que cada nível não cobre) é do esqueleto e
-> vale para qualquer módulo seu. Os **specs citados** exercitam o módulo `[EXEMPLO]` users —
-> ao substituí-lo pelo seu domínio, replique o padrão, não os casos.
+> A **estratégia** (2 níveis, fronteiras de mock, o que cada nível não cobre) vem do esqueleto
+> do Archetype NestJS e continua valendo tal como está — só os specs citados mudaram, do módulo
+> de exemplo (já removido) para os módulos reais do Finance.
 
 A estratégia cobre as regras implementadas em **dois níveis complementares**, seguindo a
 pirâmide de testes: muitos testes rápidos e isolados na base, poucos testes largos e realistas
@@ -11,37 +11,38 @@ descartável (Testcontainers) — um terceiro nível só adicionaria manutençã
 
 ## Nível 1 — Unit (`npm test`)
 
-Specs colocalizadas com o código (`src/**/*.spec.ts`), services isolados com dublês
-(repositório mockado via DI do Nest — `Test.createTestingModule`). Rodam em segundos, sem
-Docker; são o feedback de cada save e o grosso da cobertura.
+Specs colocalizadas com o código (`src/**/*.spec.ts`), services/use-cases isolados com dublês
+(repositório mockado via DI do Nest — `Test.createTestingModule`) ou, para domínio puro
+(matcher, correction-matcher, refund-settlement, totals/kpi-card util), testados direto contra
+as funções, sem DI nenhuma. Rodam em segundos, sem Docker; são o feedback de cada save e o
+grosso da cobertura (48 suítes, ~290 testes).
 
 Além dos specs de negócio, o nível unit inclui **`architecture.spec.ts` (ArchUnitTS)**: as
-regras de arquitetura do README §5 como testes executáveis — fronteira esqueleto×exemplo,
-ciclos, camadas NestJS, organização de pastas e o anti-contrabando de capacidades. É esqueleto,
-não exemplo: permanece quando o módulo `[EXEMPLO]` for apagado.
+regras de arquitetura do [README §5](./README.md) como testes executáveis — fronteira
+esqueleto×módulos de negócio, ciclos, camadas NestJS, organização de pastas e o
+anti-contrabando de capacidades.
 
-| Spec `[EXEMPLO]` | Regras cobertas |
-|---|---|
-| `users.service.spec.ts` | Unicidade de username (409 sem persistir); criação em lote na ordem; 404 de usuário inexistente (consulta e remoção, sem efeito colateral); update aplica patch sobre a entidade carregada |
+Alguns repositórios do Finance (`cash-balance.repository.spec.ts`,
+`reconciliation-item.repository.spec.ts`, `reconciliation-run.repository.spec.ts`) rodam contra
+**Postgres real via Testcontainers**, não mock — decisões de lock/transação/upsert (ex.:
+`SELECT ... FOR UPDATE` em `registerBrand`) só se provam contra o banco de verdade.
 
 ## Nível 2 — E2E (`npm run test:e2e`)
 
-`test/users.e2e-spec.ts` sobe a **aplicação inteira** (AppModule real, com pipes, filters e
-interceptors globais) contra **infra real efêmera** via Testcontainers:
+4 suítes sobem a **aplicação inteira** (`AppModule` real, com pipes, filters e interceptors
+globais) contra **infra real efêmera** via Testcontainers (Postgres) + os stubs locais de
+`scripts/finance-dev-stubs.js` (identidade SayPlus, ClickHouse, Trio — `node
+scripts/finance-dev-stubs.js &` antes de rodar):
 
-- **Postgres** — o schema é criado executando as **migrations reais** (a migration também é testada).
+| Suíte | Cobre |
+|---|---|
+| `finance-cash-balance.e2e-spec.ts` | as 7 rotas do balanço de caixa, fluxo completo (confirmar 8 bancos → registrar → reabrir → registrar de novo) |
+| `finance-reconciliation.e2e-spec.ts` | as 7 rotas da conciliação, golden dataset travado, correções de saldo, nota do operador sobrevivendo a reexecução |
+| `finance-smoke.e2e-spec.ts` | superfície comum das 14 rotas (401/403/400 de whitelist/marca inválida/data inválida), parametrizada via `it.each` contra o catálogo de `docs/migracao-finance/REGRAS-NEGOCIO-ROTAS.md` §6 |
+| `security.e2e-spec.ts` | matriz de forja de JWT (RS256, downgrade HS256, `alg: none`, issuer/audience/expiração), usando uma rota do Finance como veículo |
 
-Fluxos cobertos:
-
-1. probes de saúde fora do prefixo: liveness sem dependências; readiness com Postgres `up`;
-2. usuário criado e consultado; `password` **nunca** aparece na resposta (serialização `@Exclude`);
-3. criação em lote com validação item a item (`ParseArrayPipe`);
-4. username duplicado → 409 no contrato de erro `{ code, message }`;
-5. payload inválido → 400 do ValidationPipe; propriedade fora do DTO → 400 (whitelist estrita);
-6. update e remoção; recurso removido → 404 no contrato de erro.
-
-Requisitos: Docker em execução. O container sobe/cai dentro do teste (`--runInBand`).
-
+Requisitos: Docker em execução. Os containers Postgres sobem/caem dentro de cada teste
+(`--runInBand`).
 
 **Telemetria no e2e:** a suíte roda com o OpenTelemetry LIGADO contra um Collector
 propositalmente morto (`test/otel-failopen.setup.ts`, via jest setupFiles) — verde =
@@ -49,10 +50,10 @@ fail-open provado: observabilidade nunca derruba a aplicação.
 
 ## O que cada nível NÃO cobre (e por quê)
 
-- Unit não pega erro de SQL, mapeamento TypeORM ou wiring de módulo → por isso o e2e roda
-  migrations e módulos reais.
+- Unit não pega erro de SQL, mapeamento TypeORM ou wiring de módulo → por isso os repositórios
+  sensíveis a lock/transação e o e2e rodam migrations e módulos reais.
 - E2E não explora combinações de regra (explosão de casos, lento) → por isso as regras variam
-  nos units.
+  nos units (domínio puro tem golden dataset próprio, `test/fixtures/reconciliation-maxima-2026-08-15.json`).
 
 ## CI (implementado em `.github/workflows/ci.yml`)
 

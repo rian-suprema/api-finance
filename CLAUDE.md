@@ -1,4 +1,4 @@
-# CLAUDE.md — users-api
+# CLAUDE.md — api-finance
 
 > Guia operacional para sessões de IA neste repositório. Detalhes completos do produto/arquitetura
 > do archetype → [README.md](./README.md) · segurança/RLS → [SECURITY-README.md](./SECURITY-README.md) ·

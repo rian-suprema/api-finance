@@ -13,10 +13,10 @@
 # Ponto de junção com o deploy: os `outputs.env` entram em values-<env>.yaml;
 # os `outputs.secret` chegam via Secret externo (padrão do SRE — ex.: ESO).
 # ==============================================================================
-service: users-api
+service: api-finance
 runtime:
   platform: kubernetes
-  chart: deploy/helm/users-api
+  chart: deploy/helm/api-finance
   port: 3005
   probes:
     liveness: /health/liveness
@@ -25,13 +25,15 @@ runtime:
 requires:
   - type: postgres # → RDS Aurora PostgreSQL
     purpose: >-
-      Persistência do domínio (TypeORM; migrations em SQL explícito) COM
-      Row-Level Security + FORCE (Step 5): separação de papéis obrigatória.
+      Persistência do domínio Finance (TypeORM; migrations em SQL explícito).
+      As 8 tabelas do Finance NÃO usam Row-Level Security (marca ≠ tenant —
+      isolamento por marca é só na aplicação via BrandAccessService; ver
+      docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md, decisão 5).
+      Separação de papéis por least-privilege (não por RLS):
       • ROLE de RUNTIME (a app): NÃO-owner, só DML — DB_USERNAME/DB_PASSWORD.
-      • ROLE de MIGRAÇÃO/OWNER (Job PreSync): dono do schema, roda DDL+RLS —
+      • ROLE de MIGRAÇÃO/OWNER (Job PreSync): dono do schema, roda DDL —
         DB_MIGRATION_USERNAME/DB_MIGRATION_PASSWORD + DB_APP_ROLE (nome do
-        runtime, p/ os grants). O owner é NÃO-super (senão o FORCE não o
-        alcança). Os dois roles são criados pelo IaC/Terraform.
+        runtime, p/ os grants). Os dois roles são criados pelo IaC/Terraform.
     outputs:
       env: [DB_HOST, DB_PORT, DB_USERNAME, DB_NAME, DB_APP_ROLE]
       # DOIS Secrets distintos: runtime (app) e migração/owner (Job PreSync)

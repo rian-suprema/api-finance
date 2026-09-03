@@ -1,11 +1,19 @@
-# 🔐 Segurança & Governança — users-api
+# 🔐 Segurança & Governança — api-finance
 
 > **📖 Documentação** · [Visão geral](./README.md) · **Segurança & Governança** (este arquivo) · [💻 Execução local](./LOCAL-EXECUTION-README.md) · [⚙️ CI/CD & Esteira](./CI-CD.md)
 
 Este documento explica **como a segurança do módulo funciona de ponta a ponta**: a governança
-que **nasce na SayPlus** e o escopo que **cada módulo plugado precisa resolver** — autenticação,
-autorização, tenant e a rede de segurança no banco. O módulo **não implementa** identidade:
-ele **consome** a da plataforma e **prova** que confia nela de forma verificável.
+que **nasce na SayPlus** e o escopo que **cada módulo plugado precisa resolver** — autenticação
+e autorização. O módulo **não implementa** identidade: ele **consome** a da plataforma e
+**prova** que confia nela de forma verificável.
+
+> O isolamento de dados do Finance é por **marca** (até 3 por request, resolvida via
+> `GET /auth/me`), não por tenant — não há RLS nas tabelas do Finance. Ver
+> [`BrandAccessService`](./src/modules/finance-cash-balance/domain/services/brand-access.service.ts)
+> e a decisão 5 em
+> [APRENDIZADOS-DECISOES-FINANCE.md](./docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md).
+> O esqueleto genérico do archetype trazia multi-tenancy com RLS+FORCE no PostgreSQL para o
+> módulo de exemplo que já foi removido — esse mecanismo não existe mais neste repositório.
 
 ## 1 · O fluxo, de ponta a ponta — quem resolve o quê
 
@@ -16,20 +24,19 @@ A fronteira é nítida: a SayPlus decide *quem é* e *o que pode*; o módulo *ve
 flowchart TB
     subgraph SAYPLUS["☁️ SayPlus — GOVERNANÇA (fonte da verdade)"]
         direction TB
-        CAT["Catálogo de permissões<br/>petshop.users.read, ..."]
-        IDN["Autentica o usuário<br/>define tenantId + permissões concedidas"]
+        CAT["Catálogo de permissões<br/>finance.cash-balance.summary.read, ..."]
+        IDN["Autentica o usuário<br/>define marcas + permissões concedidas"]
         SIGN["Emite o JWT RS256<br/>ASSINA com a chave PRIVADA"]
         CAT --> IDN --> SIGN
     end
 
-    subgraph MOD["🧩 Módulo (users-api) — ESCOPO A RESOLVER (consumo)"]
+    subgraph MOD["🧩 Módulo (api-finance) — ESCOPO A RESOLVER (consumo)"]
         direction TB
         V1["1 · Valida a assinatura<br/>chave PÚBLICA · iss · aud · exp<br/>(offline, zero I/O)"]
         V2["2 · Autentica<br/>token inválido/ausente → 401"]
         V3["3 · Autoriza<br/>@Permissions × claim → 403"]
-        V4["4 · Isola o tenant<br/>tenantId do claim em toda query"]
-        V5["5 · RLS no banco<br/>PostgreSQL corta por baixo"]
-        V1 --> V2 --> V3 --> V4 --> V5
+        V4["4 · Isola por marca<br/>GET /auth/me resolve as marcas do usuário"]
+        V1 --> V2 --> V3 --> V4
     end
 
     SIGN ==>|"Bearer JWT<br/>(a cada requisição)"| V1
@@ -43,10 +50,10 @@ flowchart TB
 |---|---|---|
 | Cadastro de permissões (catálogo) | ✅ governa | consome os *codes* |
 | Login / emissão de token | ✅ emite (assina com a privada) | **nunca** emite |
-| Definição do tenant do usuário | ✅ coloca no claim | lê do claim, nunca de body/header |
+| Vínculo do usuário com marcas | ✅ expõe via `GET /auth/me` | resolve via `BrandAccessService`, nunca de body/header |
 | Validação do token | — | ✅ offline, com a chave pública |
 | Autorização por rota | concede em runtime | ✅ exige via `@Permissions` |
-| Isolamento de dados | — | ✅ filtro na app + RLS no banco |
+| Isolamento por marca | — | ✅ filtro na app (`BrandAccessService`), sem RLS |
 
 ## 2 · Modelo de confiança — como a SayPlus confia no módulo
 
@@ -72,8 +79,8 @@ O módulo lê estes campos (`src/auth/jwt-payload.interface.ts`) e **nada mais**
 |---|---|---|
 | `sub` | `"user-42"` | Identificador do usuário (auditoria/log) |
 | `email` | `"maria@empresa.com"` | Informativo |
-| `tenantId` | `"tenant-a"` | **Única** fonte de tenant — alimenta o filtro da app e o GUC da RLS |
-| `permissions[]` | `["petshop.users.read", ...]` | Confrontado com o `@Permissions` de cada rota |
+| `tenantId` | `"tenant-a"` | Herdado do contrato do archetype; o Finance não usa como filtro de RLS — marca vem de `GET /auth/me` |
+| `permissions[]` | `["finance.reconciliation.read", ...]` | Confrontado com o `@Permissions` de cada rota |
 | `iss` | `"sayplus"` | Conferido: emissor esperado |
 | `aud` | `["sayplus", "petshop"]` | Conferido: o módulo pertence ao catálogo `petshop` |
 | `exp` | *(timestamp)* | Conferido: token expirado → 401 |
@@ -85,7 +92,7 @@ O módulo lê estes campos (`src/auth/jwt-payload.interface.ts`) e **nada mais**
   "sub": "user-42",
   "email": "maria@empresa.com",
   "tenantId": "tenant-a",
-  "permissions": ["petshop.users.read", "petshop.users.create"],
+  "permissions": ["finance.reconciliation.read", "finance.reconciliation.run"],
   "iss": "sayplus",
   "aud": ["sayplus", "petshop"],
   "iat": 1735000000,
@@ -104,16 +111,17 @@ flowchart LR
     G1 -->|inválido/ausente| E401["401"]
     G1 -->|ok| G2{"PermissionsGuard<br/>@Permissions × permissions[]"}
     G2 -->|"falta code / rota sem declaração"| E403["403<br/>(deny-by-default)"]
-    G2 -->|ok| TX["Transação com<br/>SET LOCAL app.tenant_id"]
-    TX --> H["Handler + Service<br/>query filtrada por tenant"]
-    H --> DB[("PostgreSQL<br/>RLS confina ao tenant")]
+    G2 -->|ok| H["Handler + Service<br/>BrandAccessService resolve as marcas via /auth/me"]
+    H -->|"marca não reconhecida"| E400["400"]
+    H -->|"marca reconhecida sem vínculo"| E403b["403"]
+    H --> DB[("PostgreSQL<br/>8 tabelas do Finance, sem RLS")]
     PUB["@Public()<br/>(só health probes)"] -.->|dispensa token| H
 ```
 
 | Guard | Pergunta | Falhou |
 |---|---|---|
 | `JwtAuthGuard` | Quem é? JWT **RS256** válido (assinatura contra a chave pública da SayPlus + `iss` + `aud` + expiração — zero I/O, criptografia pura) | **401** |
-| `PermissionsGuard` | O que pode? `@Permissions('petshop.users.read')` da rota × claim `permissions[]` do token | **403** |
+| `PermissionsGuard` | O que pode? `@Permissions('finance.reconciliation.read')` da rota × claim `permissions[]` do token | **403** |
 
 O mesmo invariante falha FECHADO em três camadas, em momentos diferentes do ciclo de vida:
 
@@ -132,42 +140,38 @@ e o decorator na rota — a concessão (quem tem o quê) é governada na SayPlus
 sem redeploy.
 
 ```typescript
-@Permissions(PETSHOP_USERS.EXPORT)   // ← a única "mudança de segurança" numa rota nova
-@Get('export')
-exportUsers() { ... }
+@Permissions(FINANCE_RECONCILIATION.RUN)   // ← a única "mudança de segurança" numa rota nova
+@Post('run')
+runReconciliation() { ... }
 ```
 
 Convenção canônica dos codes: `modulo.recurso.acao`, com verbos `read | create | edit | delete`
 (é `edit`, nunca `update`). Os codes são **strings opacas** para o módulo — quem os concede é o
 catálogo. Todo code precisa estar **registrado na SayPlus** antes de aparecer num token.
 
-## 6 · Multi-tenancy — isolamento de dados em duas camadas
+## 6 · Isolamento por marca (Finance) — sem RLS
 
-Cada tenant vive numa fatia isolada do mesmo banco. Toda tabela de domínio carrega `tenant_id`
-(coluna interna, nunca exposta na resposta) e as unicidades de negócio são COMPOSTAS com o
-tenant — `username` é único *por tenant*. Toda query dos services filtra pelo `tenantId`
-**do claim** (lido via `@CurrentUser()`, nunca de body/header): para o tenant B, um registro do
-tenant A simplesmente "não existe" (404), em leitura, escrita e remoção. Enviar `tenantId` no
-body é rejeitado com 400 pela whitelist estrita do ValidationPipe — o claim é a única fonte.
+O esqueleto genérico do archetype trazia multi-tenancy com RLS+FORCE no PostgreSQL (para o
+módulo de exemplo, já removido). O Finance **não usa esse mecanismo**: nenhuma das 8 tabelas
+tem RLS habilitada. O isolamento é só na camada de aplicação:
 
-### Camada 3 — RLS no banco: a rede de segurança abaixo da aplicação
+- `GET /auth/me` (plataforma SayPlus) devolve os tenants/marcas do usuário, resolvidos pelo
+  [`PlatformIdentityService`](./src/modules/finance-cash-balance/infrastructure/platform/platform-identity.service.ts)
+  a partir do Bearer do próprio request — nunca de body/query;
+- [`BrandAccessService.requireBrand`](./src/modules/finance-cash-balance/domain/services/brand-access.service.ts)
+  confere a marca da URL contra essa lista: marca fora do catálogo → `400`; marca no catálogo
+  mas sem vínculo do usuário → `403`;
+- para as rotas de item da conciliação (`:id`, sem marca na URL), a autorização é **pelo dado**:
+  o item é buscado por id e sua `brand` é conferida contra as marcas acessíveis — passar um id
+  de marca alheia nunca vaza o registro, dá `403`.
 
-As camadas 1–2 vivem na aplicação. Se um `WHERE tenant_id` for esquecido num query novo, o dado
-vaza — a menos que o **próprio PostgreSQL** recuse. É o que a Row-Level Security com **FORCE**
-garante:
-
-| Peça | O que faz |
-|---|---|
-| **Separação de papéis** | Migrations rodam como um role **OWNER** (não-super, dono do schema); a app conecta como um role de **RUNTIME** não-owner, só com DML. Sem isso (usuário único = owner) a proteção seria nula |
-| **RLS + FORCE** em toda tabela de domínio | `FORCE ROW LEVEL SECURITY` sujeita **até o owner** à policy (só superuser/BYPASSRLS escapam) — o "zero protection" do usuário único deixa de existir |
-| **Policy por GUC** `app.tenant_id` | A fatia visível é o `SET LOCAL app.tenant_id` da transação. **Sem** o GUC → `NULL` → zero linhas (fail-safe: contexto ausente esconde tudo, nunca vaza tudo) |
-| **GUC por unidade de trabalho** | [`tenant-context.ts`](./src/database/tenant-context.ts) (AsyncLocalStorage nativo) + o `TenantTransactionInterceptor`: cada requisição roda numa transação com o `SET LOCAL` do tenant do **claim**; os services resolvem o repositório desse contexto — nunca de um repo injetado fixo |
-
-**Papéis e credenciais (entrega ao SRE):** dois Secrets distintos — runtime (app,
-`existingSecret`) e migração/owner (Job **PreSync**, `migrations.existingSecret`) — declarados
-em [`deploy/infra/requirements.yaml`](./deploy/infra/requirements.yaml). Os roles são criados
-pelo IaC/Terraform (no local, por `scripts/initdb/01-roles.sql`). Como exercitar a RLS de
-verdade localmente está em [💻 Execução local](./LOCAL-EXECUTION-README.md).
+**Por que não RLS:** com `FORCE ROW LEVEL SECURITY` ativo, toda leitura/escrita sem o GUC de
+tenant setado passaria a ver zero linhas — inclusive as 14 rotas HTTP do Finance, que não usam
+GUC nenhum. Decisão registrada (3 opções apresentadas, escolhida a defesa em aplicação) na
+decisão 5 de
+[APRENDIZADOS-DECISOES-FINANCE.md](./docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md). O
+caminho job/CLI (sem guard HTTP nenhum) usa `assertKnownBrand()` como defesa em profundidade,
+chamada antes de qualquer use-case resolver.
 
 ## 7 · Provado por teste — a matriz de forja
 
@@ -186,19 +190,11 @@ ou `audience` na strategy, o CI quebra antes do merge.
 
 Nos testes, [`test/auth-helper.ts`](./test/auth-helper.ts) faz o papel da SayPlus com um par
 RS256 efêmero em memória (o mesmo mecanismo do `npm run auth:token` local) — é ele que assina
-os tokens válidos e as forjas da matriz acima.
-
-E a RLS, provada no nível de conexão ([`test/rls.e2e-spec.ts`](./test/rls.e2e-spec.ts)) e com a
-**aplicação como runtime role** ([`test/rls-app.e2e-spec.ts`](./test/rls-app.e2e-spec.ts)):
-
-| Cenário | Resultado |
-|---|---|
-| Runtime **sem** GUC | enxerga **zero** linhas (fail-safe) |
-| Runtime com GUC do tenant A | só o tenant A |
-| Runtime grava linha de outro tenant | bloqueado (`WITH CHECK`) |
-| Runtime apaga linha de outro tenant | invisível → nada afetado |
-| Owner **não-super** sem GUC | zero linhas (FORCE ativo) |
-| App (runtime) via interceptor | lê/grava no seu tenant; outro tenant → 404 |
+os tokens válidos e as forjas da matriz acima. A rota-veículo é
+`POST /reconciliation/items/:id/reopen` com um id inexistente — prova "auth OK" via `404` do
+domínio sem precisar de dado de negócio real (e sem depender de ClickHouse/Trio, só do stub de
+identidade). A autorização por marca (400 marca inválida, 403 sem vínculo) tem sua própria
+matriz nos e2e do Finance (`test/finance-smoke.e2e-spec.ts`), não neste arquivo.
 
 ## 8 · Entrega da chave, rede e serviço-a-serviço
 

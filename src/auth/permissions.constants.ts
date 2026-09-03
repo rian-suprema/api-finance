@@ -10,13 +10,6 @@
  * ⚠️ Cada code daqui precisa estar REGISTRADO no catálogo SayPlus antes da
  * integração real — code não registrado nunca aparece em token emitido.
  */
-export const PETSHOP_USERS = {
-  READ: 'petshop.users.read',
-  CREATE: 'petshop.users.create',
-  EDIT: 'petshop.users.edit',
-  DELETE: 'petshop.users.delete',
-} as const;
-
 export const FINANCE_CASH_BALANCE = {
   SUMMARY_READ: 'finance.cash-balance.summary.read',
   BANKS_READ: 'finance.cash-balance.banks.read',

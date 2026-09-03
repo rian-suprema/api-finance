@@ -10,10 +10,19 @@ import type { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 
 import { AppModule } from '../src/app.module';
-import { PETSHOP_USERS } from '../src/auth/permissions.constants';
-import { InitialSchema1754560000000 } from '../src/database/migrations/1754560000000-InitialSchema';
-import { AddTenantId1755000000000 } from '../src/database/migrations/1755000000000-AddTenantId';
+import { FINANCE_RECONCILIATION } from '../src/auth/permissions.constants';
+import { FinanceInitialSchema1788210289000 } from '../src/database/migrations/1788210289000-FinanceInitialSchema';
 import { setupTestAuth, TestAuthContext } from './auth-helper';
+
+async function pingStub(url: string): Promise<void> {
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(2000) });
+  } catch {
+    throw new Error(
+      `Stub indisponível em ${url} — rode "node scripts/finance-dev-stubs.js &" antes do test:e2e`,
+    );
+  }
+}
 
 /**
  * MATRIZ DE SEGURANÇA (e2e) — transforma em comportamento PROVADO o que a
@@ -36,9 +45,13 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
   let publicKeyPem: string;
 
   const api = () => request(app.getHttpServer() as App);
-  const protectedRoute = '/api/v1/user/anyone'; // exige petshop.users.read
+  // Pendência inexistente: prova "auth OK" via 404 do domínio sem precisar de
+  // dado de negócio real — mesmo truque que a rota do exemplo usava.
+  const protectedRoute = '/api/v1/reconciliation/items/999999999/reopen'; // exige finance.reconciliation.resolve
 
   beforeAll(async () => {
+    await pingStub('http://localhost:3100/auth/me');
+
     postgres = await new PostgreSqlContainer('postgres:16-alpine').start();
 
     process.env.NODE_ENV = 'test';
@@ -61,7 +74,7 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
       username: postgres.getUsername(),
       password: postgres.getPassword(),
       database: postgres.getDatabase(),
-      migrations: [InitialSchema1754560000000, AddTenantId1755000000000],
+      migrations: [FinanceInitialSchema1788210289000],
     });
     await migrator.initialize();
     await migrator.runMigrations();
@@ -79,11 +92,11 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
   });
 
   const bearer = (token: string) =>
-    api().get(protectedRoute).set('Authorization', `Bearer ${token}`);
+    api().post(protectedRoute).set('Authorization', `Bearer ${token}`);
 
   describe('aceitação — a chave e o contrato CERTOS entram', () => {
     it('token RS256 assinado pela chave certa, iss/aud/permissão corretos → passa a auth (404 do domínio)', async () => {
-      const res = await bearer(auth.sign({ permissions: [PETSHOP_USERS.READ] }));
+      const res = await bearer(auth.sign({ permissions: [FINANCE_RECONCILIATION.RESOLVE] }));
       // 404 = auth OK, o usuário é que não existe — prova que NÃO é 401/403
       expect(res.status).toBe(404);
     });
@@ -102,7 +115,7 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
         publicKeyEncoding: { type: 'spki', format: 'pem' },
       });
       const forged = jwt.sign(
-        { permissions: [PETSHOP_USERS.READ], tenantId: 'x' },
+        { permissions: [FINANCE_RECONCILIATION.RESOLVE], tenantId: 'x' },
         impostor.privateKey,
         {
           algorithm: 'RS256',
@@ -120,25 +133,33 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
       // O ataque clássico: a chave pública não é secreta; um validador que
       // aceite HS256 a trataria como segredo HMAC e validaria a forja.
 
-      const forged = jwt.sign({ permissions: [PETSHOP_USERS.READ], tenantId: 'x' }, publicKeyPem, {
-        algorithm: 'HS256',
-        subject: 'atacante',
-        issuer: 'sayplus',
-        audience: ['sayplus', 'petshop'],
-        expiresIn: 300,
-      });
+      const forged = jwt.sign(
+        { permissions: [FINANCE_RECONCILIATION.RESOLVE], tenantId: 'x' },
+        publicKeyPem,
+        {
+          algorithm: 'HS256',
+          subject: 'atacante',
+          issuer: 'sayplus',
+          audience: ['sayplus', 'petshop'],
+          expiresIn: 300,
+        },
+      );
       const res = await bearer(forged);
       expect(res.status).toBe(401);
     });
 
     it('alg: none (token sem assinatura) → 401', async () => {
       // eslint-disable-next-line sonarjs/insecure-jwt-token, sonarjs/hardcoded-secret-signatures -- forja DELIBERADA de token sem assinatura: o teste prova a rejeição
-      const forged = jwt.sign({ permissions: [PETSHOP_USERS.READ], tenantId: 'x' }, '', {
-        algorithm: 'none',
-        subject: 'atacante',
-        issuer: 'sayplus',
-        audience: ['sayplus', 'petshop'],
-      });
+      const forged = jwt.sign(
+        { permissions: [FINANCE_RECONCILIATION.RESOLVE], tenantId: 'x' },
+        '',
+        {
+          algorithm: 'none',
+          subject: 'atacante',
+          issuer: 'sayplus',
+          audience: ['sayplus', 'petshop'],
+        },
+      );
       const res = await bearer(forged);
       expect(res.status).toBe(401);
     });
@@ -152,20 +173,25 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
   describe('forja de CLAIMS — issuer/audience/expiração conferem', () => {
     it('issuer errado (outro emissor) → 401', async () => {
       const res = await bearer(
-        auth.sign({ permissions: [PETSHOP_USERS.READ], issuer: 'atacante-idp' }),
+        auth.sign({ permissions: [FINANCE_RECONCILIATION.RESOLVE], issuer: 'atacante-idp' }),
       );
       expect(res.status).toBe(401);
     });
 
     it('audience errada (token de outro serviço) → 401', async () => {
       const res = await bearer(
-        auth.sign({ permissions: [PETSHOP_USERS.READ], audience: ['sayplus', 'outro-servico'] }),
+        auth.sign({
+          permissions: [FINANCE_RECONCILIATION.RESOLVE],
+          audience: ['sayplus', 'outro-servico'],
+        }),
       );
       expect(res.status).toBe(401);
     });
 
     it('token expirado → 401', async () => {
-      const res = await bearer(auth.sign({ permissions: [PETSHOP_USERS.READ], expiresIn: -60 }));
+      const res = await bearer(
+        auth.sign({ permissions: [FINANCE_RECONCILIATION.RESOLVE], expiresIn: -60 }),
+      );
       expect(res.status).toBe(401);
     });
   });
@@ -177,9 +203,9 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
     });
 
     it('token legítimo com a permissão ERRADA → 403 apontando o code exigido', async () => {
-      const res = await bearer(auth.sign({ permissions: ['petshop.users.delete'] }));
+      const res = await bearer(auth.sign({ permissions: ['finance.reconciliation.run'] }));
       expect(res.status).toBe(403);
-      expect((res.body as ErrorBody).message).toContain(PETSHOP_USERS.READ);
+      expect((res.body as ErrorBody).message).toContain(FINANCE_RECONCILIATION.RESOLVE);
     });
   });
 });

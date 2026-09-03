@@ -8,19 +8,20 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: users-api
-  title: Users API
+  name: api-finance
+  title: API Finance
   description: >-
-    Exemplo simples do Archetype Backend NestJS (SUPREMA) — REST + Aurora
-    PostgreSQL (TypeORM), sem cache e sem mensageria.
+    Balanço de caixa e conciliação bancária (Trio) — migrado do Archetype
+    Backend NestJS (SUPREMA) para REST + Aurora PostgreSQL (TypeORM), com
+    ClickHouse (data warehouse) e integração Trio banking-api.
   annotations:
-    github.com/project-slug: rian-suprema/simplified-traditional-archetype
+    github.com/project-slug: fehferreiraSuprema/api-finance
     backstage.io/techdocs-ref: dir:.
   tags:
     - nodejs
     - nestjs
     - typescript
-    - archetype
+    - finance
   links:
     - url: /docs
       title: Swagger UI (code-first)
@@ -29,4 +30,4 @@ spec:
   type: service
   lifecycle: experimental
   owner: group:default/platform-poc # PLACEHOLDER — validar contra grupos reais
-  system: users
+  system: finance

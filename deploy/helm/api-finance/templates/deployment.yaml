@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "users-api.fullname" . }}
+  name: {{ include "api-finance.fullname" . }}
   labels:
-    {{- include "users-api.labels" . | nindent 4 }}
+    {{- include "api-finance.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "users-api.selectorLabels" . | nindent 6 }}
+      {{- include "api-finance.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "users-api.selectorLabels" . | nindent 8 }}
+        {{- include "api-finance.selectorLabels" . | nindent 8 }}
       annotations:
         # Rollout automático quando a config muda — sem isso, editar o
         # ConfigMap não reinicia os pods e a mudança nunca chega à app.
@@ -33,7 +33,7 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "users-api.fullname" . }}
+                name: {{ include "api-finance.fullname" . }}
             {{- if .Values.existingSecret }}
             - secretRef:
                 name: {{ .Values.existingSecret }}

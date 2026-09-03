@@ -1,5 +1,5 @@
 {
-  "name": "users-api",
+  "name": "api-finance",
   "version": "0.1.0",
   "description": "Archetype SUPREMA (variante simples) — API NestJS: REST + regra de negócio + Aurora Postgres (TypeORM), sem cache e sem mensageria",
   "author": "SUPREMA",

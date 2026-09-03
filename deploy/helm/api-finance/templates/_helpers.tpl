@@ -1,27 +1,27 @@
 {{/*
 Helpers padrão do chart — nome, fullname e labels recomendados pelo Helm.
 */}}
-{{- define "users-api.name" -}}
+{{- define "api-finance.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "users-api.fullname" -}}
+{{- define "api-finance.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- printf "%s-%s" .Release.Name (include "users-api.name" .) | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-%s" .Release.Name (include "api-finance.name" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
 
-{{- define "users-api.labels" -}}
+{{- define "api-finance.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
-app.kubernetes.io/name: {{ include "users-api.name" . }}
+app.kubernetes.io/name: {{ include "api-finance.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{- define "users-api.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "users-api.name" . }}
+{{- define "api-finance.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "api-finance.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

@@ -1,4 +1,4 @@
-# ⚙️ CI/CD & Esteira — users-api
+# ⚙️ CI/CD & Esteira — api-finance
 
 > **📖 Documentação** · [Visão geral](./README.md) · [🔐 Segurança & Governança](./SECURITY-README.md) · [💻 Execução local](./LOCAL-EXECUTION-README.md) · **CI/CD & Esteira** (este arquivo)
 
@@ -32,8 +32,8 @@ flowchart LR
 |---|---|
 | `catalog-info.yaml` | Registro no catálogo do Backstage (Component, ownership, tags). Dois `PLACEHOLDER`s: `spec.owner` e `github.com/project-slug`. |
 | `.github/workflows/ci.yml` | Cinco jobs, todos **sem publicar nada** (publicação e deploy são de outra fase). `quality-validation` e `security` são os required status checks do golden path, para humanos e agentes de IA. **Detalhe de cada job na seção 3.** |
-| `deploy/helm/users-api/` | Chart: Deployment com probes, `securityContext` endurecido (non-root, rootfs read-only, drop ALL), `resources`, ConfigMap + `existingSecret`, Job PreSync de migrations, NetworkPolicy. `image.repository`/`tag` parametrizados (o registry de imagens é decisão em aberto — quando definido, é um value, não retrabalho). |
-| `docker-compose.ci.yml` | Override do smoke: usa a imagem `users-api:ci` recém-construída. |
+| `deploy/helm/api-finance/` | Chart: Deployment com probes, `securityContext` endurecido (non-root, rootfs read-only, drop ALL), `resources`, ConfigMap + `existingSecret`, Job PreSync de migrations, NetworkPolicy. `image.repository`/`tag` parametrizados (o registry de imagens é decisão em aberto — quando definido, é um value, não retrabalho). |
+| `docker-compose.ci.yml` | Override do smoke: usa a imagem `api-finance:ci` recém-construída. |
 | `deploy/infra/requirements.yaml` | **Declaração de infraestrutura** — o que o serviço exige (nesta variante: Postgres, com separação de papéis owner/runtime da RLS), com os outputs esperados. Nós declaramos; o SRE aprova em PR e realiza via Terraform. Paridade 1:1 com o compose local. |
 | `deploy/helm/*/values-{dev,prod}.yaml` | O **ponto de junção** entre a IaC e o chart: estrutura nossa, valores preenchidos com os outputs do Terraform (`[TERRAFORM OUTPUT]`/`[SRE]`/`[CI]` marcados campo a campo). |
 | `deploy/argocd/application.example.yaml` | Referência para o SRE: o chart é consumível **direto do git** pelo ArgoCD — o Application real vive no território deles. |

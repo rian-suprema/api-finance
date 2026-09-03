@@ -1,8 +1,8 @@
 # Chart do archetype — na visão do Template Registry, este é o fragment
-# `cd-helm` nascendo dentro do primeiro exemplar. O nome "users-api" é
+# `cd-helm` nascendo dentro do primeiro exemplar. O nome "api-finance" é
 # parâmetro de template no futuro (${{ values.name }}).
 apiVersion: v2
-name: users-api
+name: api-finance
 description: >-
   Chart do archetype backend NestJS (SUPREMA), variante simples — Deployment com probes de
   saúde, hardening de securityContext e configuração externada.

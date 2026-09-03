@@ -11,10 +11,11 @@
 # Espelho do serviço gerenciado:
 #   postgres → RDS Aurora PostgreSQL
 # ==============================================================================
+name: api-finance
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: users-postgres
+    container_name: api-finance-postgres
     environment:
       POSTGRES_USER: users
       POSTGRES_PASSWORD: users
@@ -23,8 +24,6 @@ services:
       - '5432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Cria os roles owner/app na 1ª subida (separação de papéis da RLS — Step 5)
-      - ./scripts/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U users -d users']
       interval: 5s
@@ -73,7 +72,7 @@ services:
   api:
     profiles: ['full']
     build: .
-    container_name: users-api
+    container_name: api-finance
     env_file: .env.docker
     ports:
       - '3005:3005'

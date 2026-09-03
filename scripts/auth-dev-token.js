@@ -1,8 +1,8 @@
 /**
  * Assina um JWT de DESENVOLVIMENTO com keys/private.pem, simulando a SayPlus.
  * Uso:
- *   npm run auth:token                                   # todas as permissões do módulo
- *   node scripts/auth-dev-token.js petshop.users.read    # só os codes passados
+ *   npm run auth:token                                          # todas as permissões do Finance
+ *   node scripts/auth-dev-token.js finance.reconciliation.read  # só os codes passados
  *
  * Os codes espelham src/auth/permissions.constants.ts (fonte canônica).
  */
@@ -11,10 +11,13 @@ const { join } = require('node:path');
 const jwt = require('jsonwebtoken');
 
 const ALL_PERMISSIONS = [
-  'petshop.users.read',
-  'petshop.users.create',
-  'petshop.users.edit',
-  'petshop.users.delete',
+  'finance.cash-balance.summary.read',
+  'finance.cash-balance.banks.read',
+  'finance.cash-balance.banks.confirm',
+  'finance.cash-balance.register.create',
+  'finance.reconciliation.read',
+  'finance.reconciliation.run',
+  'finance.reconciliation.resolve',
 ];
 
 let privateKey;

@@ -90,7 +90,7 @@ jobs:
           context: .
           push: false
           load: true # disponibiliza no daemon local p/ scan e smoke
-          tags: users-api:ci
+          tags: api-finance:ci
 
       # ── Scan da imagem em 3 camadas — runbook de triagem no README §Segurança ──
       # O scan cobre a IMAGEM inteira (SO base + camadas + app/node_modules):
@@ -101,7 +101,7 @@ jobs:
       - name: Scan — relatório para o Job Summary
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: users-api:ci
+          image-ref: api-finance:ci
           format: table
           output: trivy-report.txt
           exit-code: '0' # esta camada só reporta; quem bloqueia é o gate
@@ -109,7 +109,7 @@ jobs:
         if: always()
         run: |
           {
-            echo '## 🔍 Trivy — scan da imagem users-api:ci'
+            echo '## 🔍 Trivy — scan da imagem api-finance:ci'
             echo '```'
             cat trivy-report.txt
             echo '```'
@@ -128,7 +128,7 @@ jobs:
         if: vars.TRIVY_SARIF_UPLOAD == 'true'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: users-api:ci
+          image-ref: api-finance:ci
           format: sarif
           output: trivy-results.sarif
           exit-code: '0'
@@ -144,7 +144,7 @@ jobs:
       - name: Scan — gate HIGH/CRITICAL
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: users-api:ci
+          image-ref: api-finance:ci
           severity: HIGH,CRITICAL
           exit-code: '1'
           trivyignores: .trivyignore
@@ -171,9 +171,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Lint do chart
-        run: helm lint deploy/helm/users-api
+        run: helm lint deploy/helm/api-finance
       - name: Renderiza os manifests
-        run: helm template users-api deploy/helm/users-api > rendered.yaml
+        run: helm template api-finance deploy/helm/api-finance > rendered.yaml
       - name: Valida manifests contra o schema do K8s
         uses: docker://ghcr.io/yannh/kubeconform:latest
         with:

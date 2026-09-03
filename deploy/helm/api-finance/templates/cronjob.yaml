@@ -17,9 +17,9 @@ tem).
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "users-api.fullname" . }}-trio-capture
+  name: {{ include "api-finance.fullname" . }}-trio-capture
   labels:
-    {{- include "users-api.labels" . | nindent 4 }}
+    {{- include "api-finance.labels" . | nindent 4 }}
 spec:
   # 00:03 BRT = 03:03 UTC — aproxima os 00:00:30 BRT do `@Cron` original (o
   # `CronJob` do K8s não agenda por segundo).
@@ -31,7 +31,7 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "users-api.selectorLabels" . | nindent 12 }}
+            {{- include "api-finance.selectorLabels" . | nindent 12 }}
         spec:
           restartPolicy: OnFailure
           securityContext:
@@ -47,7 +47,7 @@ spec:
                 {{- toYaml .Values.cronjobs.trioCapture.resources | nindent 16 }}
               envFrom:
                 - configMapRef:
-                    name: {{ include "users-api.fullname" . }}
+                    name: {{ include "api-finance.fullname" . }}
                 {{- if .Values.existingSecret }}
                 - secretRef:
                     name: {{ .Values.existingSecret }}
@@ -73,9 +73,9 @@ spec:
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "users-api.fullname" . }}-reconciliation
+  name: {{ include "api-finance.fullname" . }}-reconciliation
   labels:
-    {{- include "users-api.labels" . | nindent 4 }}
+    {{- include "api-finance.labels" . | nindent 4 }}
 spec:
   # 04:00 BRT = 07:00 UTC.
   schedule: {{ .Values.cronjobs.reconciliation.schedule | quote }}
@@ -86,7 +86,7 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "users-api.selectorLabels" . | nindent 12 }}
+            {{- include "api-finance.selectorLabels" . | nindent 12 }}
         spec:
           restartPolicy: OnFailure
           # A conciliação demora minutos (bisseção do extrato por marca) — um
@@ -105,7 +105,7 @@ spec:
                 {{- toYaml .Values.cronjobs.reconciliation.resources | nindent 16 }}
               envFrom:
                 - configMapRef:
-                    name: {{ include "users-api.fullname" . }}
+                    name: {{ include "api-finance.fullname" . }}
                 {{- if .Values.existingSecret }}
                 - secretRef:
                     name: {{ .Values.existingSecret }}

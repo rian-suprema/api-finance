@@ -30,7 +30,7 @@ node dist/cli/export-trio-statement.js --from=2026-08-01 --to=2026-08-02 --out=-
 
 [ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null
 
-helm template deploy/helm/users-api --set image.tag=test >/tmp/fase15-helm.log 2>&1 \
+helm template deploy/helm/api-finance --set image.tag=test >/tmp/fase15-helm.log 2>&1 \
   && ok "helm template renderiza sem erro" || fail "helm template falhou (ver /tmp/fase15-helm.log)"
 
 grep -q "CronJob" /tmp/fase15-helm.log && ok "cronjob.yaml renderizado no output do helm template" \

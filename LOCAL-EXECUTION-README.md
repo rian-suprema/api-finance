@@ -1,4 +1,4 @@
-# 💻 Execução local — users-api
+# 💻 Execução local — api-finance
 
 > **📖 Documentação** · [Visão geral](./README.md) · [🔐 Segurança & Governança](./SECURITY-README.md) · **Execução local** (este arquivo) · [⚙️ CI/CD & Esteira](./CI-CD.md)
 
@@ -46,9 +46,10 @@ para a seção 1.
 
 ```bash
 cp .env.example .env
-docker compose up -d          # PostgreSQL (+ cria os roles owner/app — ver seção 5)
+docker compose up -d          # PostgreSQL
 npm ci                        # instala exatamente o lockfile
 npm run migration:run         # cria o schema
+node scripts/finance-dev-stubs.js &  # stubs de identidade/ClickHouse/Trio (portas 3100/8123/9001)
 npm run start:dev             # hot-reload
 ```
 
@@ -120,18 +121,19 @@ para as chamadas seguintes:
 TOKEN=$(npm run auth:token --silent)
 ```
 
-## 3 · Exercitar o CRUD
+## 3 · Exercitar as rotas do Finance
+
+Requer os stubs locais de ClickHouse/Trio/identidade de pé (`node scripts/finance-dev-stubs.js &`
+— ver `scripts/finance-dev-stubs.js`):
 
 ```bash
-curl -s -X POST localhost:3005/api/v1/user -H "authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"username":"theUser","email":"john@email.com","password":"s3cret"}'
-curl -s localhost:3005/api/v1/user/theUser -H "authorization: Bearer $TOKEN"   # password NUNCA aparece
-curl -s -X POST localhost:3005/api/v1/user -H "authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"username":"theUser"}'                     # duplicado → 409 { code, message }
-curl -s localhost:3005/api/v1/user/theUser        # SEM token → 401
+curl -s localhost:3005/api/v1/cash-balance/summary -H "authorization: Bearer $TOKEN"
+curl -s localhost:3005/api/v1/reconciliation -H "authorization: Bearer $TOKEN"
+curl -s localhost:3005/api/v1/cash-balance/summary                             # SEM token → 401
 ```
+
+Regras de negócio completas, rota a rota, em
+[docs/migracao-finance/REGRAS-NEGOCIO-ROTAS.md](./docs/migracao-finance/REGRAS-NEGOCIO-ROTAS.md).
 
 ## 4 · Testes — e os ganhos de qualidade que você vê na hora
 
@@ -152,32 +154,13 @@ npm run format:check # Prettier
 ```
 
 O que o `npm test` inclui de graça: as **regras de arquitetura** viram teste (fronteira
-esqueleto×exemplo, camadas, ciclos, **pilares de segurança** e anti-contrabando). Uma rota nova
+esqueleto×módulos de negócio, camadas, ciclos, **pilares de segurança** e anti-contrabando). Uma rota nova
 sem `@Permissions`/`@Public`, ou um import proibido, **quebra aqui** — antes do commit, não no
 PR. O detalhe de cada regra está em [Visão geral › §5.2](./README.md).
 
 Estratégia de testes completa em **[TESTING.md](./TESTING.md)**.
 
-## 5 · Exercitar a RLS de verdade localmente (opcional)
-
-Por padrão, o app local conecta como o superusuário do Postgres — cômodo, mas a RLS fica
-**inerte** (superusuário dribla policy). Para ver a **rede de segurança do banco** agindo, use
-os dois roles não-super que o `scripts/initdb/01-roles.sql` cria na 1ª subida do volume:
-
-```bash
-# migrations como OWNER (não-super); a app como RUNTIME (não-owner)
-DB_MIGRATION_USERNAME=users_owner DB_MIGRATION_PASSWORD=users_owner_dev \
-  DB_APP_ROLE=users_app npm run migration:run
-
-# rode a app apontando para o role de runtime
-DB_USERNAME=users_app DB_PASSWORD=users_app_dev npm run start:dev
-```
-
-Agora uma query sem o contexto de tenant vê **zero linhas** (fail-safe), e cada requisição só
-enxerga o seu tenant — o mecanismo em [🔐 Segurança › §6](./SECURITY-README.md). Os testes
-`test/rls.e2e-spec.ts` e `test/rls-app.e2e-spec.ts` provam isso automaticamente.
-
-## 6 · Ferramentas locais (opt-in)
+## 5 · Ferramentas locais (opt-in)
 
 Além da infra do dia a dia, o compose traz ferramentas opcionais em **profiles** — não pesam o
 `up` padrão e não fazem parte da infra de produção (por isso ficam fora do `requirements.yaml`).
@@ -213,7 +196,7 @@ Grafana em **`http://localhost:3300`** (a API usa 3005): requests e queries do T
 como spans, logs correlacionados por `trace_id`. O conceito (o que é um span, os três estados
 do interruptor) está em [Visão geral › §7](./README.md).
 
-## 7 · Setup padronizado de desenvolvimento
+## 6 · Setup padronizado de desenvolvimento
 
 | Ferramenta                                                | Papel                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------- |
@@ -223,7 +206,7 @@ do interruptor) está em [Visão geral › §7](./README.md).
 | `.editorconfig` / `.nvmrc` / `engines` / `.gitattributes` | Mesmo editor, mesmo Node (22), LF em `*.sh`, em qualquer máquina |
 | `.env.example` / `.env.test` / `.env.docker`              | Contrato de ambiente versionado; `.env` real nunca versionado    |
 
-## 8 · Tudo containerizado — a imagem local via Dockerfile + docker-compose
+## 7 · Tudo containerizado — a imagem local via Dockerfile + docker-compose
 
 Além do modo hot-reload (seção 1, app no host), você pode rodar **a aplicação também em
 container**, e ir além: **construir a mesma imagem que o CI empacota** e rodá-la localmente.
@@ -256,7 +239,7 @@ estágio final (só `node dist/main`). Reproduza o job `build-image` na sua máq
 
 ```bash
 # 1. constrói a imagem de produção
-docker build -t users-api:ci .
+docker build -t api-finance:ci .
 
 # 2. sobe a IMAGEM recém-construída contra o Postgres real (override de smoke)
 docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile full up -d

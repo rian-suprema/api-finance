@@ -17,7 +17,7 @@ config:
   # dashboards, retenção e alertas são do SRE. Vazio = telemetria DESLIGADA
   # (interruptor fail-safe do esqueleto).
   OTEL_EXPORTER_OTLP_ENDPOINT: '' # [SRE] ex.: http://otel-collector.observability:4318
-  OTEL_SERVICE_NAME: users-api
+  OTEL_SERVICE_NAME: api-finance
   OTEL_TRACES_SAMPLER: parentbased_traceidratio # [SRE] política de sampling
   OTEL_TRACES_SAMPLER_ARG: '0.1' # [SRE] fração amostrada
 

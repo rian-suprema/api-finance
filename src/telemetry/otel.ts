@@ -27,7 +27,7 @@ const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
 if (endpoint) {
   const sdk = new NodeSDK({
-    serviceName: process.env.OTEL_SERVICE_NAME ?? 'users-api',
+    serviceName: process.env.OTEL_SERVICE_NAME ?? 'api-finance',
     traceExporter: new OTLPTraceExporter(),
     metricReader: new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() }),
     instrumentations: [

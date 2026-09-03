@@ -19,11 +19,9 @@ import {
 } from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
-import { TenantTransactionInterceptor } from './database/tenant-transaction.interceptor';
 import { HealthModule } from './health/health.module';
 import { CashBalanceModule } from './modules/finance-cash-balance/cash-balance.module';
 import { ReconciliationModule } from './modules/finance-reconciliation/reconciliation.module';
-import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -64,7 +62,6 @@ import { UsersModule } from './modules/users/users.module';
     DatabaseModule,
     HealthModule,
     // Módulos de negócio
-    UsersModule,
     CashBalanceModule,
     ReconciliationModule,
   ],
@@ -86,9 +83,6 @@ import { UsersModule } from './modules/users/users.module';
     { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },
     // Aplica @Exclude/@Expose das entidades na serialização das respostas
     { provide: APP_INTERCEPTOR, useClass: ClassSerializerInterceptor },
-    // MAIS INTERNO (último): envolve o handler na transação com o GUC de tenant
-    // da RLS (Step 5). Requisições @Public (sem tenant no claim) passam direto.
-    { provide: APP_INTERCEPTOR, useClass: TenantTransactionInterceptor },
   ],
 })
 export class AppModule {}

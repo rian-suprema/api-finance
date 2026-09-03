@@ -16,9 +16,6 @@ import {
   ReconciliationRunStatus,
   ReconciliationSide,
 } from '../src/modules/finance-reconciliation/reconciliation.enums';
-import { InitialSchema1754560000000 } from '../src/database/migrations/1754560000000-InitialSchema';
-import { AddTenantId1755000000000 } from '../src/database/migrations/1755000000000-AddTenantId';
-import { EnableRowLevelSecurity1756000000000 } from '../src/database/migrations/1756000000000-EnableRowLevelSecurity';
 import { FinanceInitialSchema1788210289000 } from '../src/database/migrations/1788210289000-FinanceInitialSchema';
 import { setupTestAuth, TestAuthContext } from './auth-helper';
 
@@ -291,12 +288,7 @@ describe('Finance — Conciliação Bancária (e2e)', () => {
       username: postgres.getUsername(),
       password: postgres.getPassword(),
       database: postgres.getDatabase(),
-      migrations: [
-        InitialSchema1754560000000,
-        AddTenantId1755000000000,
-        EnableRowLevelSecurity1756000000000,
-        FinanceInitialSchema1788210289000,
-      ],
+      migrations: [FinanceInitialSchema1788210289000],
     });
     await migrator.initialize();
     await migrator.runMigrations();

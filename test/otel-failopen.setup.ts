@@ -8,7 +8,7 @@
  * derrubar boot ou request, o e2e denuncia aqui.
  */
 process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:1';
-process.env.OTEL_SERVICE_NAME = 'users-api-e2e';
+process.env.OTEL_SERVICE_NAME = 'api-finance-e2e';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../src/telemetry/otel');

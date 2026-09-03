@@ -8,21 +8,21 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: users-api-dev
+  name: api-finance-dev
   namespace: argocd # [SRE] namespace do ArgoCD
 spec:
   project: default # [SRE] projeto ArgoCD com RBAC adequado
   source:
     repoURL: https://github.com/rian-suprema/simplified-traditional-archetype.git
     targetRevision: main # [SRE] ou tag/SHA, conforme política de promoção
-    path: deploy/helm/users-api
+    path: deploy/helm/api-finance
     helm:
       valueFiles:
         - values.yaml
         - values-dev.yaml # o ponto de junção com os outputs do Terraform
   destination:
     server: https://kubernetes.default.svc
-    namespace: users-api-dev # [SRE] namespace provisionado pela IaC
+    namespace: api-finance-dev # [SRE] namespace provisionado pela IaC
   syncPolicy:
     # [SRE] automatizar ou não o sync é política de vocês:
     # automated: { prune: true, selfHeal: true }

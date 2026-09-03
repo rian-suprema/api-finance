@@ -8,13 +8,13 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "users-api.fullname" . }}
+  name: {{ include "api-finance.fullname" . }}
   labels:
-    {{- include "users-api.labels" . | nindent 4 }}
+    {{- include "api-finance.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "users-api.selectorLabels" . | nindent 6 }}
+      {{- include "api-finance.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
   {{- if .Values.networkPolicy.ingress.gatewayNamespace }}
