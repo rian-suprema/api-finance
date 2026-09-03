@@ -27,6 +27,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
+    "test:organic": "jest --config test/jest-organic.json --runInBand",
     "dup:check": "jscpd src --threshold 3 --reporters console",
     "dup:report": "jscpd src --reporters html,console --output report/jscpd",
     "auth:keys": "node scripts/auth-dev-keys.js",

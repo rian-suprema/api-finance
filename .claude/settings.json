@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/feh/simplified-traditional-archetype/scripts/update-phase-cost.js"
+          }
+        ]
+      }
+    ]
+  }
+}

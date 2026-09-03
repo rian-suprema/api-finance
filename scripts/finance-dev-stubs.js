@@ -139,31 +139,64 @@ const RECON_BANK_ROWS = [
 ]
 
 /**
+ * Segunda janela de conciliação, **isolada** do golden dataset acima —
+ * criada para o teste orgânico T10e (saque que atravessa a virada do dia,
+ * PLANO-TESTES-ORGANICOS-FINANCE.md §7.2). Data bem distante de `RECON_DATE`
+ * de propósito, para as janelas [D-1, D+2) nunca se sobreporem e as
+ * contagens travadas de `test/finance-reconciliation.e2e-spec.ts` (golden
+ * dataset de `RECON_DATE`) continuarem exatamente as mesmas.
+ *
+ * Um único saque, **só do lado da plataforma** (sem par no extrato de
+ * propósito — vira pendência OPEN de verdade, com `occurred_at` inspecionável
+ * em `reconciliation_items`, em vez de um par casado que nunca gera linha na
+ * tabela). Liberado 5 minutos depois da virada BRT (`RECON_DATE_2 03:05 UTC`
+ * = `00:05` local) — este teste prova que o item aparece no dia da
+ * liberação (`RECON_DATE_2`), não no dia anterior.
+ */
+const RECON_DATE_2 = '2026-07-20'
+const RECON_CORE_START_2 = `${RECON_DATE_2}T03:00:00`
+/** Sem par no extrato de propósito — ver comentário acima. */
+const RECON_BANK_ROWS_2 = []
+const RECON_PLATFORM_WITHDRAWALS_2 = [
+  { document_id: 'saq-borda', external_key: 'ext-saq-borda', occurred_at: `${RECON_DATE_2} 03:05:00.000`, amount: '33.00' },
+]
+
+/**
  * `ref_id` no formato da Trio: UUIDv7 com o instante nos 48 primeiros bits, sem
  * os bits de versão setados. É de onde o módulo tira a hora do PIX, já que
  * `transaction_date` vem nulo. Cada linha ganha um instante diferente dentro do
  * dia, a partir das 12:00 UTC.
  */
-const trioRefId = (index) => {
-  const at = Date.parse(`${RECON_DATE}T12:00:00.000Z`) + index * 60_000
+const trioRefId = (dateIso, index) => {
+  const at = Date.parse(`${dateIso}T12:00:00.000Z`) + index * 60_000
   const hex = at.toString(16).padStart(12, '0')
   const tail = String(index).padStart(4, '0')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-1131-1eb4-e8b349bd${tail}`
 }
 
+/** As duas janelas de conciliação que este stub sabe responder — ver T10e acima. */
+const RECON_TRIO_WINDOWS = [
+  { coreStartPrefix: RECON_CORE_START, dateIso: RECON_DATE, rows: RECON_BANK_ROWS },
+  { coreStartPrefix: RECON_CORE_START_2, dateIso: RECON_DATE_2, rows: RECON_BANK_ROWS_2 },
+]
+
 const trioTransactions = (accountId, url) => {
   const from = new URL(url, 'http://localhost').searchParams.get('from_datetime') ?? ''
 
-  if (accountId !== 'acc-suprema' || !from.startsWith(RECON_CORE_START)) return []
+  if (accountId !== 'acc-suprema') return []
+
+  const win = RECON_TRIO_WINDOWS.find((w) => from.startsWith(w.coreStartPrefix))
+  if (!win) return []
+  const { dateIso, rows: RECON_BANK_ROWS } = win
 
   return RECON_BANK_ROWS.map((row, index) => ({
     amount: { currency: 'BRL', amount: row.cents },
     // O estorno carrega a chave do lançamento que ele desfaz (`externalRef`), que
     // é o que permite liquidar os dois juntos.
     external_id: (row.externalRef ?? row.ref).replace('trio-', 'ext-'),
-    end_to_end_id: `E00000000${RECON_DATE.replace(/-/g, '')}${row.ref}`,
+    end_to_end_id: `E00000000${dateIso.replace(/-/g, '')}${row.ref}`,
     transaction_date: null,
-    ref_id: trioRefId(index),
+    ref_id: trioRefId(dateIso, index),
     reconciliation_id: `${row.ref}-rec`,
     ref_type: row.refType ?? (row.posting === 'credit' ? 'collection' : 'payment'),
     transaction_type: row.type,
@@ -338,17 +371,30 @@ const RECON_PLATFORM_WITHDRAWALS = [
  *
  * A janela da plataforma vai de `D−1` a `D+1`, então não dá para comparar o
  * início com o dia de referência: o teste é de contenção.
+ *
+ * Duas janelas conhecidas: o golden dataset trancado (`RECON_CORE_START`) e a
+ * janela isolada do T10e (`RECON_CORE_START_2`, ver comentário acima de
+ * `RECON_BANK_ROWS_2`) — nunca a mesma consulta bate nas duas, porque as
+ * datas são propositalmente distantes.
  */
-const buildReconRows = (url, rows) => {
+const RECON_PLATFORM_WINDOWS = [
+  { coreStartIso: `${RECON_CORE_START}Z`, deposits: RECON_PLATFORM_DEPOSITS, withdrawals: RECON_PLATFORM_WITHDRAWALS },
+  { coreStartIso: `${RECON_CORE_START_2}Z`, deposits: [], withdrawals: RECON_PLATFORM_WITHDRAWALS_2 },
+]
+
+const buildReconRows = (url, kind) => {
   const params = new URL(url, 'http://localhost').searchParams
   const from = Date.parse(params.get('param_inicio') ?? '')
   const to = Date.parse(params.get('param_fim') ?? '')
-  const coreStart = Date.parse(`${RECON_CORE_START}Z`)
 
   if (params.get('param_marca') !== 'suprema') return []
   if (!Number.isFinite(from) || !Number.isFinite(to)) return []
 
-  return from <= coreStart && coreStart < to ? rows : []
+  for (const win of RECON_PLATFORM_WINDOWS) {
+    const coreStart = Date.parse(win.coreStartIso)
+    if (from <= coreStart && coreStart < to) return win[kind]
+  }
+  return []
 }
 
 /**
@@ -468,8 +514,8 @@ http
       else if (body.includes('fct_correction')) rows = buildCorrectionRows(req.url)
       // A ponte CPF → client_id também lê `fct_withdrawal`: casa antes dela.
       else if (body.includes('pix_key')) rows = buildBridgeRows(req.url)
-      else if (body.includes('fct_deposit')) rows = buildReconRows(req.url, RECON_PLATFORM_DEPOSITS)
-      else if (body.includes('fct_withdrawal')) rows = buildReconRows(req.url, RECON_PLATFORM_WITHDRAWALS)
+      else if (body.includes('fct_deposit')) rows = buildReconRows(req.url, 'deposits')
+      else if (body.includes('fct_withdrawal')) rows = buildReconRows(req.url, 'withdrawals')
       // A do histórico também filtra por intervalo: casa antes da mensal.
       else if (body.includes('GROUP BY dia, marca')) rows = buildHistoryRows(req.url)
       else if (body.includes('toDate({data_inicio:String})')) rows = MONTH_ROWS
