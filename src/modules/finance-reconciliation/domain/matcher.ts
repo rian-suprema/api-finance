@@ -70,6 +70,49 @@ function groupByKey(movements: Movement[], keyless: Movement[]): Map<string, Mov
   return buckets;
 }
 
+interface BucketPairOutcome {
+  matched: number;
+  crossEdgeCount: number;
+  crossEdgeCents: number;
+  platformLeft: Movement[];
+  bankLeft: Movement[];
+}
+
+/** Casa as linhas de uma única chave (já dentro-do-dia-primeiro por `coreFirst`). */
+function pairBucket(platformRows: Movement[], bankRows: Movement[]): BucketPairOutcome {
+  const platform = coreFirst(platformRows);
+  const bank = coreFirst(bankRows);
+  const pairs = Math.min(platform.length, bank.length);
+
+  let matched = 0;
+  let crossEdgeCount = 0;
+  let crossEdgeCents = 0;
+
+  for (let index = 0; index < pairs; index++) {
+    const platformRow = platform[index];
+    const bankRow = bank[index];
+
+    // Par inteiro fora do dia pertence ao dia vizinho: não conta como
+    // conciliado aqui, e será contado quando aquele dia for conciliado.
+    if (!platformRow.core && !bankRow.core) continue;
+
+    matched++;
+
+    if (platformRow.core !== bankRow.core) {
+      crossEdgeCount++;
+      crossEdgeCents += bankRow.core ? bankRow.amountCents : -platformRow.amountCents;
+    }
+  }
+
+  return {
+    matched,
+    crossEdgeCount,
+    crossEdgeCents,
+    platformLeft: platform.slice(pairs),
+    bankLeft: bank.slice(pairs),
+  };
+}
+
 function pairByExternalKey(platform: Movement[], bank: Movement[]): PairOutcome {
   const platformLeft: Movement[] = [];
   const bankLeft: Movement[] = [];
@@ -85,27 +128,12 @@ function pairByExternalKey(platform: Movement[], bank: Movement[]): PairOutcome 
     const bankRows = bankBuckets.get(key) ?? [];
     if (platformRows.length > 1 || bankRows.length > 1) duplicateKeys++;
 
-    const ordered = { platform: coreFirst(platformRows), bank: coreFirst(bankRows) };
-    const pairs = Math.min(ordered.platform.length, ordered.bank.length);
-
-    for (let index = 0; index < pairs; index++) {
-      const platformRow = ordered.platform[index];
-      const bankRow = ordered.bank[index];
-
-      // Par inteiro fora do dia pertence ao dia vizinho: não conta como
-      // conciliado aqui, e será contado quando aquele dia for conciliado.
-      if (!platformRow.core && !bankRow.core) continue;
-
-      matched++;
-
-      if (platformRow.core !== bankRow.core) {
-        crossEdgeCount++;
-        crossEdgeCents += bankRow.core ? bankRow.amountCents : -platformRow.amountCents;
-      }
-    }
-
-    platformLeft.push(...ordered.platform.slice(pairs));
-    bankLeft.push(...ordered.bank.slice(pairs));
+    const outcome = pairBucket(platformRows, bankRows);
+    matched += outcome.matched;
+    crossEdgeCount += outcome.crossEdgeCount;
+    crossEdgeCents += outcome.crossEdgeCents;
+    platformLeft.push(...outcome.platformLeft);
+    bankLeft.push(...outcome.bankLeft);
     bankBuckets.delete(key);
   }
 

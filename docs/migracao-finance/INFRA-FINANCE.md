@@ -402,6 +402,10 @@ inflar o pod que serve HTTP.
 
 ## 10 · `requirements.yaml` — o que declarar ao SRE
 
+> **✅ Adotado na Fase 17** — os 3 itens abaixo (ClickHouse, Trio, identidade SayPlus) foram
+> adicionados a `deploy/infra/requirements.yaml` como está aqui. O vocabulário de `type` continua
+> como sugestão a validar com o SRE (não confirmado por eles nesta trilha).
+
 O arquivo atual declara 3 itens (`postgres`, `k8s-secret` da chave JWT, `cni-network-policy`). O
 Finance acrescenta dependências que o SRE precisa conhecer. Proposta de adição — o vocabulário de
 `type` é do catálogo do SRE, então os nomes abaixo são sugestão a validar:
@@ -442,22 +446,23 @@ Finance acrescenta dependências que o SRE precisa conhecer. Proposta de adiçã
     outputs:
       env: [SAYPLUS_API_URL]
 
-  # --- Execução agendada ------------------------------------------------------
-  - type: cronjob
-    purpose: >-
-      3 execuções agendadas em BRT: captura do fechamento Trio (00:00:30),
-      retentativa (00:30) e conciliação bancária (04:00). Hoje são @Cron
-      in-process; com replicaCount>1 a conciliação duplica trabalho (ver
-      INFRA-FINANCE.md §6). Recomendação: CronJob do K8s invocando os CLIs, com
-      RECONCILIATION_SCHEDULE_ENABLED=false e TRIO_CLOSING_CAPTURE_ENABLED=false
-      no Deployment.
-    outputs:
-      env: [RECONCILIATION_SCHEDULE_ENABLED, TRIO_CLOSING_CAPTURE_ENABLED]
 ```
+
+> **Correção da Fase 17 ao rascunho original:** este §10 tinha um 4º item ("Execução agendada",
+> `type: cronjob`) descrevendo `@Cron` in-process com flags `RECONCILIATION_SCHEDULE_ENABLED`/
+> `TRIO_CLOSING_CAPTURE_ENABLED` — **nenhum dos dois existe**. A decisão real, fechada na Fase 15
+> (`CLAUDE.md`, decisão 3 e item 16): **nunca portamos `@nestjs/schedule`/`@Cron` in-process**; a
+> execução agendada é só o `CronJob` do Kubernetes (`deploy/helm/users-api/templates/cronjob.yaml`)
+> invocando os 5 CLIs, com as MESMAS variáveis de ambiente dos 3 itens acima (`envFrom` do mesmo
+> ConfigMap/Secret) — nenhuma flag nova de habilitar/desabilitar. Por ser um recurso já declarado
+> dentro deste próprio chart (não uma dependência externa que o SRE provisiona por fora), o `CronJob`
+> não entra como um 4º item de `requires:` em `requirements.yaml` — só os 3 itens externos entram.
 
 A regra do arquivo é que **o `docker-compose.yml` espelha 1:1 esta lista**. Com o Finance, o compose
 precisa ganhar os stubs (ou serviços reais) correspondentes a ClickHouse, Trio e identidade — senão a
-paridade local declarada deixa de ser verdade e o gate anti-contrabando perde referência.
+paridade local declarada deixa de ser verdade e o gate anti-contrabando perde referência. Confirmado
+na Fase 17: `.env.docker` ganhou as mesmas 3 URLs apontando para `host.docker.internal` (os stubs de
+`scripts/finance-dev-stubs.js` rodam no host, fora da rede do compose).
 
 ---
 

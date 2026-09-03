@@ -5,7 +5,12 @@ import { filterFlow, matchFlow, sumCore } from './matcher';
 import { settleRefunds } from './refund-settlement';
 import type { Movement } from './reconciliation.types';
 
-const FIXTURE_PATH = path.join(process.cwd(), 'test', 'fixtures', 'reconciliation-maxima-2026-08-15.json');
+const FIXTURE_PATH = path.join(
+  process.cwd(),
+  'test',
+  'fixtures',
+  'reconciliation-maxima-2026-08-15.json',
+);
 
 interface FlowExpectation {
   matchedCount: number;
@@ -29,7 +34,7 @@ interface Fixture {
   };
 }
 
-const fixture: Fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8'));
+const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Fixture;
 
 /**
  * O casamento roda sobre as listas já sem os estornos liquidados — é o que a

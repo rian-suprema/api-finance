@@ -18,11 +18,32 @@ const TENANTS = [
   { id: '33333333-3333-3333-3333-333333333333', slug: 'maxima-bet', name: 'Máxima Bet' },
 ]
 
+/**
+ * Decodifica (sem verificar assinatura — não é papel do stub validar) o
+ * payload do Bearer recebido, só para permitir o cenário de teste abaixo.
+ */
+const decodeJwtPayload = (authorizationHeader) => {
+  try {
+    const token = (authorizationHeader ?? '').replace(/^Bearer\s+/i, '')
+    const payload = token.split('.')[1]
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
+  } catch {
+    return {}
+  }
+}
+
 http
   .createServer((req, res) => {
     if (req.url.startsWith('/auth/me')) {
+      // Sentinela só de teste (Fase 17, cenário 403 "usuário sem acesso à
+      // marca"): sub=user-limited-brands devolve só o tenant ULTRA — prova a
+      // rejeição real de PlatformIdentityService contra uma marca do
+      // catálogo (ex.: suprema) à qual o usuário não tem vínculo, sem mockar
+      // a integração (continua sendo uma chamada HTTP real a este stub).
+      const { sub } = decodeJwtPayload(req.headers.authorization)
+      const tenants = sub === 'user-limited-brands' ? TENANTS.filter((t) => t.slug === 'ultra-bet') : TENANTS
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ data: { id: 'dev-user', tenants: TENANTS } }))
+      res.end(JSON.stringify({ data: { id: 'dev-user', tenants } }))
       return
     }
     res.writeHead(404).end()

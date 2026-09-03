@@ -271,6 +271,64 @@ describe('CashBalanceRepository (Postgres real via testcontainers)', () => {
     });
   });
 
+  describe('closeCompleteDays', () => {
+    it('fecha, em ordem cronológica, os dias com as 3 marcas confirmadas — contra Postgres real (::text no raw SQL)', async () => {
+      // Cenário só alcançável fora do fluxo normal de registerBrand (que já
+      // fecha o dia sozinho na 3ª marca): usado pelo import-balance-history,
+      // que grava snapshots diretos e precisa fechar retroativamente. Simula
+      // isso registrando e depois reabrindo só o `cash_balance_days.status`,
+      // deixando as 3 marcas CONFIRMED em `cash_balance_daily`.
+      for (const date of ['2026-08-12', '2026-08-05']) {
+        for (const brand of ['suprema', 'ultra', 'maxima'] as const) {
+          await repository.registerBrand(
+            buildRegisterParams({ referenceDate: date, brand }),
+            buildResolveManualBalances(),
+          );
+        }
+      }
+      await dataSource.query(
+        `UPDATE cash_balance_days SET status = 'OPEN' WHERE reference_date IN ('2026-08-12', '2026-08-05')`,
+      );
+
+      // Sem o `::text` no SELECT raw de closeCompleteDays, `reference_date` volta
+      // `Date` do driver `pg`, e `.localeCompare` (usado no sort do retorno)
+      // lançaria `TypeError: a.localeCompare is not a function` aqui.
+      const closed = await repository.closeCompleteDays(
+        '2026-08-01',
+        '2026-08-15',
+        3,
+        'operador-1',
+      );
+
+      expect(closed).toEqual(['2026-08-05', '2026-08-12']);
+
+      const days = await dataSource.query<StatusRow[]>(
+        `SELECT status FROM cash_balance_days WHERE reference_date IN ('2026-08-05', '2026-08-12')`,
+      );
+      expect(days.every((day) => day.status === 'CLOSED')).toBe(true);
+    });
+
+    it('não fecha dia sem as 3 marcas — devolve lista vazia, sem tocar o status', async () => {
+      await repository.registerBrand(
+        buildRegisterParams({ referenceDate: '2026-08-20', brand: 'suprema' }),
+        buildResolveManualBalances(),
+      );
+
+      const closed = await repository.closeCompleteDays(
+        '2026-08-01',
+        '2026-08-31',
+        3,
+        'operador-1',
+      );
+
+      expect(closed).toEqual([]);
+      const day = await dataSource.query<StatusRow[]>(
+        `SELECT status FROM cash_balance_days WHERE reference_date = '2026-08-20'`,
+      );
+      expect(day[0].status).toBe('OPEN');
+    });
+  });
+
   describe('reopenBrand', () => {
     it('reabre a marca (DRAFT) e o dia (OPEN) na mesma transação — nunca um sem o outro', async () => {
       await repository.registerBrand(

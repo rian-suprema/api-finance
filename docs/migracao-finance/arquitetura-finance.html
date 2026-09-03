@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Migração Finance → Archetype</title>
+<style>
+  :root{
+    --bg: #05070d;
+    --bg-panel: #0b0f1a;
+    --bg-card: #0d1220;
+    --border: #1c2436;
+    --border-soft: #161c2c;
+    --text: #dce3f5;
+    --text-dim: #8592b0;
+    --text-faint: #55617f;
+
+    --cyan: #37e9ff;
+    --cyan-dim: #1a7d8f;
+    --magenta: #ff4fd8;
+    --magenta-dim: #8a2c76;
+    --violet: #9b6bff;
+    --amber: #ffb347;
+    --amber-dim: #8a622a;
+    --green: #4dff9e;
+    --green-dim: #2a8a5c;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(155,107,255,0.10), transparent 60%),
+      radial-gradient(1000px 700px at 110% 20%, rgba(55,233,255,0.08), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+    margin: 0;
+    padding: 40px 24px 80px;
+    min-height: 100vh;
+  }
+
+  .mono{ font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+
+  header{
+    max-width: 1240px;
+    margin: 0 auto 36px;
+  }
+  header .eyebrow{
+    color: var(--cyan);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 600;
+    text-shadow: 0 0 12px rgba(55,233,255,0.55);
+  }
+  header h1{
+    font-size: 30px;
+    margin: 8px 0 6px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  header p{
+    color: var(--text-dim);
+    max-width: 780px;
+    line-height: 1.55;
+    font-size: 14.5px;
+    margin: 0;
+  }
+
+  .legend{
+    max-width: 1240px;
+    margin: 26px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+  .legend span{ display:inline-flex; align-items:center; gap:8px; }
+  .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; box-shadow: 0 0 8px currentColor; }
+  .dot.get{ background: var(--cyan); color: var(--cyan); }
+  .dot.post{ background: var(--magenta); color: var(--magenta); }
+  .dot.ext{ background: var(--amber); color: var(--amber); }
+  .dot.db{ background: var(--green); color: var(--green); }
+  .dot.job{ background: var(--violet); color: var(--violet); }
+
+  section{
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+
+  .section-title{
+    display:flex;
+    align-items:baseline;
+    gap: 12px;
+    margin: 56px 0 18px;
+  }
+  .section-title h2{
+    font-size: 18px;
+    margin:0;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .section-title .count{
+    font-size: 12px;
+    color: var(--text-faint);
+    font-family: monospace;
+  }
+  .section-title::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background: linear-gradient(90deg, var(--border), transparent);
+  }
+
+  /* ---------- diagrama SVG ---------- */
+  .diagram-wrap{
+    background: linear-gradient(180deg, var(--bg-panel), var(--bg));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 8px;
+    overflow-x: auto;
+  }
+  .diagram-wrap svg{ display:block; min-width: 980px; width: 100%; height: auto; }
+
+  .node-label{
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    fill: var(--text);
+  }
+  .node-sub{
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-size: 10.5px;
+    fill: var(--text-dim);
+  }
+  .badge-text{ font-family: monospace; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; }
+
+  /* ---------- cards de rota ---------- */
+  .grid{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .card{
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 16px 14px;
+    position: relative;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .card:hover{
+    transform: translateY(-2px);
+  }
+  .card.get{ border-color: rgba(55,233,255,0.35); }
+  .card.get:hover{ border-color: var(--cyan); box-shadow: 0 0 22px rgba(55,233,255,0.18); }
+  .card.post{ border-color: rgba(255,79,216,0.35); }
+  .card.post:hover{ border-color: var(--magenta); box-shadow: 0 0 22px rgba(255,79,216,0.18); }
+
+  .card-head{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .method{
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.03em;
+  }
+  .method.get{ color: var(--cyan); background: rgba(55,233,255,0.12); box-shadow: 0 0 10px rgba(55,233,255,0.25) inset; }
+  .method.post{ color: var(--magenta); background: rgba(255,79,216,0.12); box-shadow: 0 0 10px rgba(255,79,216,0.25) inset; }
+
+  .path{
+    font-family: monospace;
+    font-size: 12.5px;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  .status{
+    margin-left:auto;
+    font-family: monospace;
+    font-size: 10px;
+    color: var(--text-faint);
+    border: 1px solid var(--border-soft);
+    padding: 2px 6px;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+
+  .card p.desc{
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    margin: 0 0 12px;
+  }
+
+  .perm{
+    font-family: monospace;
+    font-size: 10.5px;
+    color: var(--violet);
+    background: rgba(155,107,255,0.10);
+    border: 1px solid rgba(155,107,255,0.25);
+    padding: 3px 7px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-bottom: 10px;
+  }
+
+  .tags{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tag{
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-soft);
+    color: var(--text-dim);
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+  }
+  .tag .dot{ width:6px; height:6px; }
+
+  footer{
+    max-width: 1240px;
+    margin: 60px auto 0;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-soft);
+    color: var(--text-faint);
+    font-size: 11.5px;
+    line-height: 1.6;
+  }
+  footer a{ color: var(--cyan); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">SayPlus Finance → Simplified Traditional Archetype</div>
+  <h1>Mapa de rotas e comunicação — módulo Finance dentro do archetype</h1>
+  <p>
+    15 rotas HTTP (14 de negócio + <span class="mono">/health</span>) em dois módulos de domínio —
+    <strong>Balanço de Caixa</strong> e <strong>Conciliação Bancária</strong> — migrando do serviço
+    standalone <span class="mono">finance-api</span> (Prisma, porta 3004, banco próprio) para dentro
+    deste archetype (TypeORM, guards globais já existentes). Diagrama de fluxo acima, cards de rota
+    abaixo — companheiro de <span class="mono">MIGRACAO-FINANCE.md</span>.
+  </p>
+  <div class="legend">
+    <span><i class="dot get"></i> Rota GET (leitura)</span>
+    <span><i class="dot post"></i> Rota POST (mutação/ação)</span>
+    <span><i class="dot ext"></i> Dependência externa (somente leitura)</span>
+    <span><i class="dot db"></i> Postgres próprio do serviço</span>
+    <span><i class="dot job"></i> Job (cron / CLI, sem usuário)</span>
+  </div>
+</header>
+
+<section>
+  <div class="section-title"><h2>Fluxo de arquitetura</h2><span class="count">cliente → guards → camadas → dados</span></div>
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 1160 820" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glowCyan" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glowMagenta" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glowAmber" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glowGreen" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="5" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glowViolet" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- ===================== CONEXÕES (desenhadas antes das caixas) ===================== -->
+      <g fill="none" stroke-width="1.6">
+        <!-- Client -> Guards -->
+        <path d="M390,70 L390,110" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.8"/>
+        <!-- Guards -> 3 controllers -->
+        <path d="M390,160 C390,180 205,180 205,200" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.75"/>
+        <path d="M390,160 L390,200"                stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.75"/>
+        <path d="M390,160 C390,180 905,180 905,200" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.75"/>
+        <!-- Controllers -> Services -->
+        <path d="M205,260 L205,300" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.7"/>
+        <path d="M535,260 L535,300" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.7"/>
+        <!-- module import: reconciliation -> cash-balance (BrandAccessService, TrioBankingClient) -->
+        <path d="M390,330 L350,330" stroke="#9b6bff" stroke-dasharray="3 4" filter="url(#glowViolet)" opacity="0.85"/>
+        <!-- Services -> Use-cases -->
+        <path d="M205,360 C205,385 300,385 330,400" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.7"/>
+        <path d="M535,360 C535,385 460,385 440,400" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.7"/>
+        <!-- Use-cases -> Repositories -->
+        <path d="M370,460 L370,500" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.75"/>
+        <path d="M580,460 L580,500" stroke="#37e9ff" filter="url(#glowCyan)" opacity="0.75"/>
+        <!-- Repositories -> Postgres -->
+        <path d="M370,560 C370,585 370,585 370,600" stroke="#4dff9e" filter="url(#glowGreen)" opacity="0.85"/>
+        <!-- Services -> SayPlus /auth/me -->
+        <path d="M350,330 C550,330 650,330 790,325" stroke="#ffb347" filter="url(#glowAmber)" opacity="0.75"/>
+        <!-- Use-cases -> ClickHouse -->
+        <path d="M680,420 C740,420 750,430 790,430" stroke="#ffb347" filter="url(#glowAmber)" opacity="0.75"/>
+        <!-- Repositories/Trio adapter -> Trio banking-api -->
+        <path d="M680,520 C740,520 750,530 790,530" stroke="#ffb347" filter="url(#glowAmber)" opacity="0.75"/>
+        <!-- Jobs -> Use-cases (dashed, sem usuário) -->
+        <path d="M790,610 C650,610 500,520 440,455" stroke="#9b6bff" stroke-dasharray="4 5" filter="url(#glowViolet)" opacity="0.8"/>
+        <!-- Health -> Postgres (ping direto, Terminus) -->
+        <path d="M905,260 C905,470 620,600 510,635" stroke="#4dff9e" stroke-dasharray="4 5" filter="url(#glowGreen)" opacity="0.55"/>
+      </g>
+
+      <!-- ===================== NÓS ===================== -->
+
+      <!-- Cliente -->
+      <g>
+        <rect x="170" y="20" width="440" height="50" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1.3" filter="url(#glowCyan)"/>
+        <text x="390" y="41" text-anchor="middle" class="node-label">Cliente HTTP</text>
+        <text x="390" y="57" text-anchor="middle" class="node-sub">web/ do SayPlus — biblioteca React, fora deste repo</text>
+      </g>
+
+      <!-- Guards -->
+      <g>
+        <rect x="170" y="110" width="440" height="50" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1.3" filter="url(#glowCyan)"/>
+        <text x="390" y="131" text-anchor="middle" class="node-label">Guards globais (AuthModule) — já existem</text>
+        <text x="390" y="147" text-anchor="middle" class="node-sub">JwtAuthGuard → PermissionsGuard · deny-by-default</text>
+      </g>
+
+      <!-- Controllers -->
+      <g>
+        <rect x="60" y="200" width="290" height="60" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1.2"/>
+        <text x="205" y="225" text-anchor="middle" class="node-label">CashBalanceController</text>
+        <text x="205" y="242" text-anchor="middle" class="node-sub">7 rotas · confirmar / registrar / reabrir</text>
+      </g>
+      <g>
+        <rect x="390" y="200" width="290" height="60" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1.2"/>
+        <text x="535" y="225" text-anchor="middle" class="node-label">ReconciliationController</text>
+        <text x="535" y="242" text-anchor="middle" class="node-sub">7 rotas · rodar / resolver / correções</text>
+      </g>
+      <g>
+        <rect x="760" y="200" width="290" height="60" rx="10" fill="#0d1220" stroke="#4dff9e" stroke-width="1.2"/>
+        <text x="905" y="225" text-anchor="middle" class="node-label">HealthController</text>
+        <text x="905" y="242" text-anchor="middle" class="node-sub">@Public() · Terminus (liveness/readiness)</text>
+      </g>
+
+      <!-- Services -->
+      <g>
+        <rect x="60" y="300" width="290" height="60" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1" opacity="0.9"/>
+        <text x="205" y="325" text-anchor="middle" class="node-label">Services</text>
+        <text x="205" y="342" text-anchor="middle" class="node-sub">brand-access · read · registry</text>
+      </g>
+      <g>
+        <rect x="390" y="300" width="290" height="60" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1" opacity="0.9"/>
+        <text x="535" y="325" text-anchor="middle" class="node-label">Services</text>
+        <text x="535" y="342" text-anchor="middle" class="node-sub">reconciliation · correction-evidence</text>
+      </g>
+
+      <!-- Use-cases -->
+      <g>
+        <rect x="60" y="400" width="620" height="60" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1.3" filter="url(#glowCyan)"/>
+        <text x="370" y="425" text-anchor="middle" class="node-label">Use-cases (18)</text>
+        <text x="370" y="442" text-anchor="middle" class="node-sub">uma classe = uma operação de negócio · lógica pura em domain/matcher, refund-settlement, correction-matcher</text>
+      </g>
+
+      <!-- Repositories -->
+      <g>
+        <rect x="60" y="500" width="620" height="60" rx="10" fill="#0d1220" stroke="#37e9ff" stroke-width="1.3" filter="url(#glowCyan)"/>
+        <text x="370" y="525" text-anchor="middle" class="node-label">Repositórios TypeORM</text>
+        <text x="370" y="542" text-anchor="middle" class="node-sub">único ponto que toca o ORM — 3 repositórios, 8 entidades</text>
+      </g>
+
+      <!-- Postgres cylinder -->
+      <g filter="url(#glowGreen)">
+        <path d="M230,615 a140,16 0 1,0 280,0 a140,16 0 1,0 -280,0 Z M230,615 v55 a140,16 0 1,0 280,0 v-55"
+              fill="#0d1220" stroke="#4dff9e" stroke-width="1.4"/>
+        <text x="370" y="647" text-anchor="middle" class="node-label" fill="#dce3f5">Postgres — schema único</text>
+        <text x="370" y="663" text-anchor="middle" class="node-sub">8 tabelas Finance + users [EXEMPLO]</text>
+      </g>
+
+      <!-- SayPlus /auth/me -->
+      <g>
+        <rect x="790" y="300" width="300" height="55" rx="10" fill="#0d1220" stroke="#ffb347" stroke-width="1.2" filter="url(#glowAmber)"/>
+        <text x="940" y="322" text-anchor="middle" class="node-label">API principal SayPlus</text>
+        <text x="940" y="338" text-anchor="middle" class="node-sub">GET /auth/me · marcas do vínculo · cache 60s</text>
+      </g>
+
+      <!-- ClickHouse -->
+      <g>
+        <rect x="790" y="400" width="300" height="55" rx="10" fill="#0d1220" stroke="#ffb347" stroke-width="1.2" filter="url(#glowAmber)"/>
+        <text x="940" y="422" text-anchor="middle" class="node-label">ClickHouse</text>
+        <text x="940" y="438" text-anchor="middle" class="node-sub">dw_bet.* · somente leitura · query_params nomeados</text>
+      </g>
+
+      <!-- Trio -->
+      <g>
+        <rect x="790" y="500" width="300" height="55" rx="10" fill="#0d1220" stroke="#ffb347" stroke-width="1.2" filter="url(#glowAmber)"/>
+        <text x="940" y="522" text-anchor="middle" class="node-label">Trio banking-api</text>
+        <text x="940" y="538" text-anchor="middle" class="node-sub">saldo point-in-time · extrato por bisseção · leitura</text>
+      </g>
+
+      <!-- Jobs -->
+      <g>
+        <rect x="790" y="595" width="300" height="60" rx="10" fill="#0d1220" stroke="#9b6bff" stroke-width="1.2" filter="url(#glowViolet)"/>
+        <text x="940" y="618" text-anchor="middle" class="node-label">Jobs — sem usuário</text>
+        <text x="940" y="634" text-anchor="middle" class="node-sub">3 crons (@Cron) + 5 CLIs · mesmos use-cases</text>
+      </g>
+
+      <!-- Legenda inline do diagrama -->
+      <g class="node-sub">
+        <circle cx="70" cy="740" r="4" fill="#37e9ff"/><text x="82" y="744" fill="#8592b0">pipeline do archetype (síncrono)</text>
+        <circle cx="330" cy="740" r="4" fill="#ffb347"/><text x="342" y="744" fill="#8592b0">dependência externa, somente leitura</text>
+        <circle cx="620" cy="740" r="4" fill="#9b6bff"/><text x="632" y="744" fill="#8592b0">caminho de job (sem JWT / sem usuário)</text>
+        <circle cx="900" cy="740" r="4" fill="#4dff9e"/><text x="912" y="744" fill="#8592b0">escrita/leitura em Postgres</text>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<section>
+  <div class="section-title"><h2>Balanço de Caixa</h2><span class="count">7 rotas · CashBalanceController</span></div>
+  <div class="grid">
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">/cash-balance/summary</span></div>
+      <div class="perm">cash-balance.summary.read</div>
+      <p class="desc">6 KPIs de depósito/saque (dia anterior e mês vigente) por marca, lidos do warehouse a cada request.</p>
+      <div class="tags"><span class="tag"><i class="dot ext"></i>ClickHouse</span></div>
+    </div>
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">/cash-balance/banks</span></div>
+      <div class="perm">cash-balance.banks.read</div>
+      <p class="desc">Estado dos 8 bancos por marca. Banco API mostra o fechamento já capturado — nunca chama a Trio na hora (~135ms).</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">/cash-balance/history</span></div>
+      <div class="perm">cash-balance.summary.read</div>
+      <p class="desc">Histórico por dia+marca; só dias CONFIRMED aparecem na tabela. Teto de 180 dias, sem paginação.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span><span class="tag"><i class="dot ext"></i>ClickHouse</span></div>
+    </div>
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">/cash-balance/trio/refresh</span><span class="status">único que chama a Trio</span></div>
+      <div class="perm">cash-balance.banks.read</div>
+      <p class="desc">Releitura do saldo point-in-time da conta virtual Trio, sob demanda.</p>
+      <div class="tags"><span class="tag"><i class="dot ext"></i>Trio</span></div>
+    </div>
+
+    <div class="card post">
+      <div class="card-head"><span class="method post">POST</span><span class="path">:brand/banks/:bank/confirm</span><span class="status">204</span></div>
+      <div class="perm">cash-balance.banks.confirm</div>
+      <p class="desc">Confirma o saldo de um banco manual da marca. Cada confirmação é atômica — card ganha badge OK.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card post">
+      <div class="card-head"><span class="method post">POST</span><span class="path">:brand/register</span></div>
+      <div class="perm">cash-balance.register.create</div>
+      <p class="desc">Botão OK da marca. Não aceita saldo no corpo — grava só o que já foi confirmado banco a banco.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card post">
+      <div class="card-head"><span class="method post">POST</span><span class="path">:brand/reopen</span><span class="status">204</span></div>
+      <div class="perm">cash-balance.register.create</div>
+      <p class="desc">Devolve a marca a DRAFT e destrava edição. Reabrir uma marca reabre o dia inteiro.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="section-title"><h2>Conciliação Bancária</h2><span class="count">7 rotas · ReconciliationController</span></div>
+  <div class="grid">
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">/reconciliation</span></div>
+      <div class="perm">reconciliation.read</div>
+      <p class="desc">Resultado já calculado do dia por marca, com as pendências. Nunca dispara varredura na hora.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">/reconciliation/history</span></div>
+      <div class="perm">reconciliation.read</div>
+      <p class="desc">Lista todo dia do intervalo, mesmo sem execução. Severidade: NOT_RUN &gt; FAILED &gt; RUNNING &gt; PENDING &gt; RECONCILED.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card post">
+      <div class="card-head"><span class="method post">POST</span><span class="path">/reconciliation/run</span><span class="status">202 async</span></div>
+      <div class="perm">reconciliation.run</div>
+      <p class="desc">Dispara a conciliação — varredura por bisseção do extrato Trio, ~2min/marca. Tela acompanha pelo status.</p>
+      <div class="tags"><span class="tag"><i class="dot ext"></i>Trio</span><span class="tag"><i class="dot ext"></i>ClickHouse</span><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">:brand/corrections</span></div>
+      <div class="perm">reconciliation.read</div>
+      <p class="desc">Busca a correção de saldo que explica pendência de saque (jogador bloqueado). 4 níveis de confiança, janela de 7 dias. Só leitura.</p>
+      <div class="tags"><span class="tag"><i class="dot ext"></i>ClickHouse</span></div>
+    </div>
+
+    <div class="card post">
+      <div class="card-head"><span class="method post">POST</span><span class="path">:brand/corrections/apply</span></div>
+      <div class="perm">reconciliation.resolve</div>
+      <p class="desc">Reusa a busca do GET; dá baixa só nos candidatos exatos (diferença zero), com nota automática. Idempotente.</p>
+      <div class="tags"><span class="tag"><i class="dot ext"></i>ClickHouse</span><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card post">
+      <div class="card-head"><span class="method post">POST</span><span class="path">items/:id/resolve</span><span class="status">204</span></div>
+      <div class="perm">reconciliation.resolve</div>
+      <p class="desc">Registra a nota do operador (10–1000 caracteres, obrigatória) e fecha a pendência.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+    <div class="card post">
+      <div class="card-head"><span class="method post">POST</span><span class="path">items/:id/reopen</span><span class="status">204</span></div>
+      <div class="perm">reconciliation.resolve</div>
+      <p class="desc">Reabre a pendência, apagando o tratamento anterior (nota e autor).</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span></div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="section-title"><h2>Saúde &amp; jobs</h2><span class="count">1 rota pública · 3 crons · 5 CLIs</span></div>
+  <div class="grid">
+
+    <div class="card get">
+      <div class="card-head"><span class="method get">GET</span><span class="path">/health</span><span class="status">@Public()</span></div>
+      <div class="perm">— sem permissão —</div>
+      <p class="desc">Migra para Terminus: liveness sem dependência, readiness pingando Postgres e ClickHouse.</p>
+      <div class="tags"><span class="tag"><i class="dot db"></i>Postgres</span><span class="tag"><i class="dot ext"></i>ClickHouse</span></div>
+    </div>
+
+    <div class="card" style="border-color: rgba(155,107,255,0.35)">
+      <div class="card-head"><span class="method" style="color:#9b6bff;background:rgba(155,107,255,.12)">CRON</span><span class="path">captura Trio · 00:00:30 &amp; 00:30 BRT</span></div>
+      <p class="desc">Captura (e retenta) o fechamento point-in-time das 3 marcas na Trio, grava em trio_closing_balances.</p>
+      <div class="tags"><span class="tag"><i class="dot ext"></i>Trio</span><span class="tag"><i class="dot job"></i>sem usuário</span></div>
+    </div>
+
+    <div class="card" style="border-color: rgba(155,107,255,0.35)">
+      <div class="card-head"><span class="method" style="color:#9b6bff;background:rgba(155,107,255,.12)">CRON</span><span class="path">conciliação · 04:00 BRT</span></div>
+      <p class="desc">Concilia o dia anterior nas 3 marcas, com folga para o warehouse ingerir. Mesmo caminho do POST /run.</p>
+      <div class="tags"><span class="tag"><i class="dot ext"></i>Trio</span><span class="tag"><i class="dot ext"></i>ClickHouse</span><span class="tag"><i class="dot job"></i>sem usuário</span></div>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  Gerado a partir da análise de <span class="mono">sayplus-modules/finance</span> (BRIEFING-ARCHETYPE.md,
+  ARQUITETURA.md, HANDOFF.md, prisma/schema.prisma, controllers) cruzada com o estado atual deste
+  archetype (auth/, RLS, architecture.spec.ts). Detalhe completo, decisões em aberto e checklist de
+  execução em <a href="./MIGRACAO-FINANCE.md">MIGRACAO-FINANCE.md</a>.
+</footer>
+
+</body>
+</html>

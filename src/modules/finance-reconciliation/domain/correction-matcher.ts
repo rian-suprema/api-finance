@@ -96,7 +96,10 @@ export const findCorrectionCandidates = (
  * pagamento só. Também cobre o mesmo jogador com duas correções na mesma marca
  * (visto uma vez: R$ 0,32 + R$ 0,27 = R$ 0,59).
  */
-const findSums = (target: CorrectionTarget, corrections: CorrectionEntry[]): CorrectionCandidate[] => {
+const findSums = (
+  target: CorrectionTarget,
+  corrections: CorrectionEntry[],
+): CorrectionCandidate[] => {
   if (corrections.length > MAX_CORRECTIONS_FOR_COMBINATION) return [];
 
   const found: CorrectionCandidate[] = [];

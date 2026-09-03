@@ -77,13 +77,29 @@ describe('Arquitetura do archetype (variante simples)', () => {
   // ADR-FINANCE-3: `haveNoCycles()` do ArchUnitTS não distingue import de TIPO
   // de import de VALOR — um ciclo de arquivo aparece mesmo quando um dos dois
   // lados usa `import type` (que não gera dependência em tempo de execução).
-  // O TypeORM exige relação bidirecional real (@OneToMany + @ManyToOne) entre
-  // CashBalanceDay↔CashBalanceDaily e ReconciliationRun↔ReconciliationItem
-  // (DADOS-FINANCE.md §3.1/§3.2 e §4.1/§4.2) — cada par referencia a classe do
-  // outro por construção. As duas pastas de entities/ do Finance saem do
-  // escopo desta regra geral; a regra seguinte garante, dentro delas, que o
-  // lado "pai" nunca importa a classe "filha" como valor (só como tipo) — ou
-  // seja, que o ciclo real (de valor) continua inexistente.
+  // As duas pastas de entities/ do Finance saem do escopo desta regra geral
+  // (folder-wide, não por par de relação).
+  //
+  // Escopo REAL da garantia (revisado na Fase 17 — o texto anterior
+  // generalizava demais): as 2 regras abaixo cobrem só CashBalanceDay↔
+  // CashBalanceDaily e ReconciliationRun↔ReconciliationItem — o "pai" nesses
+  // 2 pares importa a "filha" só como tipo (`@OneToMany('NomeString', ...)`
+  // com alvo por STRING, não por classe), então o ciclo de VALOR não existe
+  // nesses dois. As demais relações bidirecionais dentro da pasta excluída
+  // (CashBalanceDaily↔CashBalanceBankEntry, CashBalanceDaily↔
+  // CashBalanceBrandSnapshot) usam o padrão padrão do TypeORM
+  // (`@OneToMany(() => Classe, ...)`/`@ManyToOne(() => Classe, ...)`, alvo por
+  // ARROW FUNCTION) — isso exige import de VALOR dos dois lados, e portanto
+  // É um ciclo de valor real, sem teste compensatório dedicado. Seguro hoje
+  // porque todas as classes carregam antes de `DataSource.initialize()`
+  // resolver a metadata (mesma ordem de módulo do Node, sem acesso
+  // circular-em-tempo-de-import a nenhuma classe ainda indefinida) — mas
+  // qualquer entidade nova adicionada a esta pasta fica sem proteção alguma
+  // de ciclo, incluindo ciclos não relacionados a este padrão TypeORM
+  // sancionado. Não corrigido nesta fase (mudar o alvo dessas 2 relações para
+  // string exigiria alterar entidades centrais de dinheiro na última fase da
+  // trilha); registrado como débito conhecido — ver
+  // `docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md`, decisão 9.
   it('não há ciclos de dependência', async () => {
     const rule = projectFiles()
       .inFolder('src/**', {

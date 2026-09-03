@@ -7,20 +7,26 @@ import { settleRefunds } from './refund-settlement';
 import type { Movement, ReconciliationFlow } from './reconciliation.types';
 import { roundCurrency } from '../../../common/utils/number.util';
 
-const FIXTURE_PATH = path.join(process.cwd(), 'test', 'fixtures', 'reconciliation-maxima-2026-08-15.json');
+const FIXTURE_PATH = path.join(
+  process.cwd(),
+  'test',
+  'fixtures',
+  'reconciliation-maxima-2026-08-15.json',
+);
 
 interface Fixture {
   platform: Movement[];
   bank: Movement[];
 }
 
-const fixture: Fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8'));
+const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Fixture;
 const settled = settleRefunds(fixture.platform, fixture.bank);
 
 function pendingSum(movements: Movement[], side: 'PLATFORM' | 'BANK'): number {
   return roundCurrency(
-    movements.filter((movement) => movement.side === side).reduce((sum, movement) => sum + movement.amountCents, 0) /
-      100,
+    movements
+      .filter((movement) => movement.side === side)
+      .reduce((sum, movement) => sum + movement.amountCents, 0) / 100,
   );
 }
 

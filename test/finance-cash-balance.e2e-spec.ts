@@ -360,6 +360,35 @@ describe('Finance — Balanço de Caixa (e2e)', () => {
       expect(await dayStatus(date)).toBe('OPEN');
     });
 
+    it('fluxo completo (Fase 17, cenário 2): reabrir e registrar de novo sem reconfirmar bancos', async () => {
+      const date = '2026-08-24';
+      await confirmAllManualBanks('suprema', date);
+      await seedTrioClosing('suprema', date, 100);
+
+      const firstRegister = await api()
+        .post(`${prefix}/cash-balance/suprema/register`)
+        .set('Authorization', bearer)
+        .send({ date });
+      expect(firstRegister.status).toBe(201);
+      expect(await dailyStatus(date, 'suprema')).toBe('CONFIRMED');
+
+      const reopenRes = await api()
+        .post(`${prefix}/cash-balance/suprema/reopen`)
+        .set('Authorization', bearer)
+        .send({ date });
+      expect(reopenRes.status).toBe(204);
+      expect(await dailyStatus(date, 'suprema')).toBe('DRAFT');
+
+      // Reabrir não desconfirma os bancos manuais nem apaga o fechamento da
+      // Trio já capturado — registrar de novo funciona sem reconfirmar nada.
+      const secondRegister = await api()
+        .post(`${prefix}/cash-balance/suprema/register`)
+        .set('Authorization', bearer)
+        .send({ date });
+      expect(secondRegister.status).toBe(201);
+      expect(await dailyStatus(date, 'suprema')).toBe('CONFIRMED');
+    });
+
     it('marca nunca registrada → 404', async () => {
       const res = await api()
         .post(`${prefix}/cash-balance/suprema/reopen`)

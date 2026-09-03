@@ -14,19 +14,19 @@
     "repository": "/home/feh/simplified-traditional-archetype",
     "branch": "feature/migracao-finance",
     "startDate": "2026-08-31",
-    "lastUpdated": "2026-09-02T23:30:00.000Z"
+    "lastUpdated": "2026-09-03T00:10:00.000Z"
   },
   "summary": {
     "totalPhases": 17,
-    "completed": 16,
+    "completed": 17,
     "inProgress": 0,
-    "pending": 1,
+    "pending": 0,
     "totalEstimatedHours": 72,
-    "hoursCompleted": 66,
-    "hoursRemaining": 6,
-    "percentComplete": 94.12,
-    "totalCostUsd": 175.45,
-    "projectedTotalCostUsd": 190.21
+    "hoursCompleted": 72,
+    "hoursRemaining": 0,
+    "percentComplete": 100.0,
+    "totalCostUsd": 196.41,
+    "projectedTotalCostUsd": 196.41
   },
   "dailyLog": [],
   "executionGroups": [
@@ -63,13 +63,13 @@
     }
   ],
   "aiCosts": {
-    "totalInputTokens": 3142,
-    "totalOutputTokens": 1214493,
-    "totalCacheWriteTokens": 4993770,
-    "totalCacheReadTokens": 464423231,
-    "totalCostUsd": 175.45,
-    "projectedTotalCostUsd": 190.21,
-    "costCalibrationFactor": 0.2461,
+    "totalInputTokens": 3550,
+    "totalOutputTokens": 1373946,
+    "totalCacheWriteTokens": 5648002,
+    "totalCacheReadTokens": 518141652,
+    "totalCostUsd": 196.41,
+    "projectedTotalCostUsd": 196.41,
+    "costCalibrationFactor": 0.2541,
     "costWithoutCacheUsd": 0,
     "sessionCursors": {
       "8fef6769-552b-4469-a06b-078e169905ec": {
@@ -115,10 +115,10 @@
         "cacheRead": 73525005
       },
       "58b626f1-de72-4d00-9543-37bfbb6b0695": {
-        "input": 60,
-        "output": 13915,
-        "cacheWrite": 72753,
-        "cacheRead": 2569943
+        "input": 468,
+        "output": 173368,
+        "cacheWrite": 726985,
+        "cacheRead": 56288364
       }
     },
     "notes": "Custo calculado via scripts/update-phase-cost.js (pricing por modelo — ver assets/update-phase-cost.js no skill criar-fase, fonte única). estimatedCostUsd de cada fase é heurística de planejamento (ver docs/migracao-finance/MIGRACAO-FINANCE.md), não pricing real."
@@ -777,30 +777,62 @@
     {
       "id": 17,
       "name": "Fechamento — e2e completo, quality gates, cutover",
-      "status": "pending",
+      "status": "completed",
       "model": "claude-sonnet-5",
       "estimatedHours": 6,
       "actualHours": null,
-      "startDate": null,
-      "completedDate": null,
+      "startDate": "2026-09-02",
+      "completedDate": "2026-09-03",
       "dependsOn": [
         15,
         16
       ],
       "description": "e2e Testcontainers com stubs Trio/ClickHouse/identidade, 190 verificações do smoke-test portadas, quality gates completos, requirements.yaml final, revisão de performance do CLAUDE.md + sincronização do code-review-graph",
-      "notes": [],
+      "notes": [
+        "Os 12 comandos do passo 4 (gates do CI, localmente) rodados de ponta a ponta pela PRIMEIRA vez na trilha — 3 débitos pré-existentes descobertos e corrigidos, nenhum deles do Finance: (1) scripts orgânicos das Fases 01/02 nunca receberam o fix --outputFile da Fase 05 (mesma causa-raiz, Logger contaminando --json); (2) npm audit --audit-level=high tinha 2 vulnerabilidades transitivas pré-existentes (fast-uri alta via @nestjs/cli/@commitlint/cli, qs moderada via express/supertest) — corrigidas com npm audit fix sem --force (só bump de patch/minor); (3) .env.docker nunca ganhou as 14 variáveis novas do Finance — docker compose --profile full up teria caído no boot (Joi fail-fast). Ver scripts/fechamento-financeiro/FASE-17-TESTE-ORGANICO.md para o detalhe e os exit codes reais de cada comando.",
+        "14 erros de npm run lint pré-existentes das Fases 01/02 (débito registrado desde a Fase 03, 'decisão do usuário sobre quando limpar') corrigidos nesta fase: 2 sonarjs/no-floating-point-equality (suprimidos com eslint-disable-next-line + comentário — são testes que existem para provar igualdade exata pós-arredondamento), 4 @typescript-eslint/no-unsafe-assignment (JSON.parse(...) as Fixture em vez de const fixture: Fixture = JSON.parse(...)), 1 sonarjs/todo-tag (mesmo falso positivo de 'todo' como pronome, 7ª ocorrência), 1 sonarjs/cognitive-complexity em matcher.ts (extract-method puro: pairByExternalKey → pairBucket, comportamento idêntico confirmado por 63/63 testes do domínio da conciliação antes e depois).",
+        "Inconsistência real descoberta e resolvida com decisão do usuário (3 opções): REGRAS-NEGOCIO-ROTAS.md §1.1/§6 descrevia um ThrottlerGuard (429, 100 req/min) que não existe em nenhuma camada (nem app, nem ingress/Helm). Decisão: documentar a divergência em §8, não implementar. Linha 429 do catálogo riscada; cadeia de guardas corrigida para JwtAuthGuard→PermissionsGuard (2 guards reais, não 3).",
+        "test/finance-smoke.e2e-spec.ts criado (72 testes): superfície comum do catálogo §6 via it.each — 401/403 nas 14 rotas, marca inválida/sem acesso nas 5 rotas com :brand (via extensão do stub de identidade para decodificar o sub do Bearer — sentinela user-limited-brands), banco/balance/data inválidos, campo extra em toda rota com corpo, :id inválido, nota fora dos limites (bruta e pós-trim), NOT_RUN, e as 2 dependências externas fora do ar (identidade e ClickHouse) via 2 instâncias Nest adicionais com env apontando para porta fechada.",
+        "finance-cash-balance.e2e-spec.ts (+1 teste) e finance-reconciliation.e2e-spec.ts (+1 teste): os 2 fluxos completos ponta a ponta pedidos pela fase — register→reopen→register de novo sem reconfirmar bancos; nota do operador sobrevive a uma reexecução de run (invariante 10, chave natural não run_id).",
+        "deploy/infra/requirements.yaml (+3 itens: ClickHouse, Trio banking-api, identidade SayPlus) e docs/migracao-finance/INFRA-FINANCE.md §10 marcados como adotados; corrigido o 4º item stale do rascunho original (RECONCILIATION_SCHEDULE_ENABLED/TRIO_CLOSING_CAPTURE_ENABLED, que nunca existiram — a decisão real da Fase 15 foi CronJob puro sem flag de app).",
+        "Revisão de performance do CLAUDE.md: 546→108 linhas (diff vs commit pré-trilha 88e9cdf: 552→114). As 16 'Decisões já fechadas' + ~50 bullets de 'Aprendizados críticos' movidos verbatim para docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md (novo), substituídos por '## Convenções consolidadas' (5 parágrafos, só regras duráveis). code-review-graph: não aplicável a este projeto (nenhum hook/MCP configurado em .claude/settings.json).",
+        "Swagger confirmado 14/14 rotas de negócio (via GET /docs-json contra o servidor real).",
+        "Escalonamento /code-review (nível high, 8 ângulos + verificação) sobre o diff completo main...feature/migracao-finance encontrou 1 bug real: CashBalanceRepository.closeCompleteDays (só usado pelo CLI import-balance-history) fazia SELECT reference_date raw sem ::text — dataSource.query() devolve Date do driver pg, não string, e o .localeCompare() do sort final quebraria com TypeError. Reproduzido byte a byte (revertendo o fix, o teste novo falhou com exatamente esse erro) e corrigido com ::text + 2 testes novos contra Postgres real (cash-balance.repository.spec.ts, 8/8). Mesmo padrão corrigido por consistência em findLastKnownBalances. Também corrigido: comentário do ADR-FINANCE-3 em architecture.spec.ts generalizava demais (só 2 dos 4 pares bidirecionais na pasta excluída têm de fato ciclo de valor testado — os outros 2, CashBalanceDaily↔CashBalanceBankEntry e ↔CashBalanceBrandSnapshot, têm ciclo real não testado, seguro hoje mas sem proteção para entidade nova — registrado como débito em APRENDIZADOS-DECISOES-FINANCE.md); AuditInterceptor.NAMED_ACTIONS sem 'resolve'/'apply' desde que a Conciliação passou a reusar o interceptor na Fase 13/14 (as 2 escritas mais relevantes para auditoria caíam em 'CREATE' genérico) — corrigido + 2 testes novos. 2 achados investigados linha a linha contra o código-fonte real da origem (/home/feh/sayplus-modules/finance) e descartados como não-regressão (comportamento fielmente portado, mesmo nos 2 casos): item auto-resolvido como estorno nunca reabre automaticamente numa execução posterior; confirmBank sem guarda de status pós-registro. Achados de qualidade (duplicação de parser de CLI, padrão de degradação ClickHouse repetido, upserts item-a-item em vez de lote, bisseção da Trio sem paralelismo) registrados como débito conhecido, não corrigidos nesta fase. Suíte completa re-confirmada depois de todas as correções: npm test 290/290, npm run test:e2e 151/151, lint/format:check 0."
+      ],
       "criteria": {
         "total": 18,
-        "passed": 0
+        "passed": 18
       },
-      "outputTokens": null,
-      "costUsd": null,
+      "outputTokens": 159453,
+      "costUsd": 20.9619,
       "estimatedCostUsd": 60,
       "files": [
+        "test/finance-smoke.e2e-spec.ts",
         "test/finance-cash-balance.e2e-spec.ts",
         "test/finance-reconciliation.e2e-spec.ts",
-        "test/finance-smoke.e2e-spec.ts",
-        "deploy/infra/requirements.yaml"
+        "deploy/infra/requirements.yaml",
+        "docs/migracao-finance/INFRA-FINANCE.md",
+        "docs/migracao-finance/REGRAS-NEGOCIO-ROTAS.md",
+        "docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md",
+        "scripts/fechamento-financeiro/FASE-17-TESTE-ORGANICO.md",
+        "scripts/finance-dev-stubs.js",
+        "scripts/dominio-conciliacao/FASE-01-TESTE-ORGANICO.sh",
+        "scripts/dominio-balanco-caixa/FASE-02-TESTE-ORGANICO.sh",
+        "src/modules/finance-reconciliation/domain/matcher.ts",
+        "src/modules/finance-cash-balance/domain/kpi-card.util.spec.ts",
+        "src/modules/finance-reconciliation/domain/correction-matcher.spec.ts",
+        "src/modules/finance-reconciliation/domain/matcher.spec.ts",
+        "src/modules/finance-reconciliation/domain/refund-settlement.spec.ts",
+        "src/modules/finance-reconciliation/domain/refund-settlement.ts",
+        "src/modules/finance-reconciliation/domain/totals.util.spec.ts",
+        ".env.docker",
+        "package-lock.json",
+        "CLAUDE.md",
+        "src/architecture.spec.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository.spec.ts",
+        "src/modules/finance-cash-balance/infrastructure/audit.interceptor.ts",
+        "src/modules/finance-cash-balance/infrastructure/audit.interceptor.spec.ts",
+        "src/modules/finance-cash-balance/infrastructure/cash-balance.repository-reads.ts"
       ]
     }
   ]

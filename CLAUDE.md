@@ -36,495 +36,57 @@ Dúvida arquitetural ou inconsistência detectada durante uma fase: **PARAR**, a
 no chat, aguardar escolha explícita do usuário antes de prosseguir. Nunca inventar contrato, regra de
 negócio ou decisão arquitetural para preencher uma lacuna.
 
-## Estado atual — Migração do módulo Finance
+## Migração do módulo Finance — trilha concluída
 
-Trilha em `feature/migracao-finance` — 17 fases, dashboard em
-[docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html), progresso em
-[docs/migracao-finance/fases/progress.json](./docs/migracao-finance/fases/progress.json).
+Trilha `feature/migracao-finance` — **17/17 fases concluídas em 2026-09-03**. As 14 rotas de negócio
+(7 do balanço de caixa + 7 da conciliação), o schema de 8 tabelas, as 3 integrações externas
+(ClickHouse, Trio, identidade SayPlus), o `CronJob` K8s + 5 CLIs e os 12 gates do CI (localmente)
+passam de ponta a ponta. Dashboard/progresso completos em
+[docs/migracao-finance/fases/dashboard.html](./docs/migracao-finance/fases/dashboard.html) /
+[progress.json](./docs/migracao-finance/fases/progress.json). Histórico fase a fase (decisões +
+aprendizados completos) em
+[docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md](./docs/migracao-finance/APRENDIZADOS-DECISOES-FINANCE.md)
+— a versão que qualquer sessão precisa carregar por padrão é a seção abaixo.
 
-**Fase atual: 17 — Fechamento (última).**
+## Convenções consolidadas — Migração Finance
 
-> **Marco: as 14 rotas de negócio do Finance estão completas** (7 do balanço de caixa + 7 da
-> conciliação, incluindo as 2 de evidência de correção da Fase 14). O `CronJob` (Fase 15) substitui
-> os `@Cron` in-process que a origem tinha — nunca portados para este destino.
+**Arquitetura/RLS:** Finance tem 8 tabelas próprias, PK `SERIAL`, **sem RLS** (marca ≠ tenant —
+isolamento por marca vive só em `BrandAccessService`, app layer; defesa do caminho job/CLI é
+`assertKnownBrand()`, chamada antes de qualquer use-case resolver). Readiness verifica só Postgres —
+ClickHouse/Trio nunca entram nele (degradação deliberada). Nunca existiu `@Cron` in-process — execução
+agendada é só `CronJob` do K8s invocando os 5 CLIs. Não existe rate limit (`ThrottlerGuard`) em
+nenhuma camada — divergência conhecida da documentação, não implementado por decisão (Fase 17).
 
-| Fase | Nome | Status |
-|---|---|---|
-| 01 | Domínio puro — Conciliação + golden dataset | ✅ concluída |
-| 02 | Domínio puro — Balanço de Caixa | ✅ concluída |
-| 03 | Esqueleto não-funcional + allowlist + contrato de erro | ✅ concluída |
-| 04 | Schema TypeORM — 8 entidades + migration inicial | ✅ concluída |
-| 05 | Integração ClickHouse — conexão global | ✅ concluída |
-| 06 | Integração Trio — client + adapter point-in-time | ✅ concluída |
-| 07 | Persistência do Balanço de Caixa (repositórios + read-service) | ✅ concluída |
-| 08 | Identidade da plataforma (/auth/me) + BrandAccessService | ✅ concluída |
-| 09 | Balanço de Caixa — use-cases + services + controller | ✅ concluída |
-| 10 | Persistência da Conciliação (repositório) | ✅ concluída |
-| 11 | ClickHouse da Conciliação (movimentos + busca de correção) | ✅ concluída |
-| 12 | Trio — movimentos por bisseção + regressão | ✅ concluída |
-| 13 | Conciliação — use-cases núcleo + controller | ✅ concluída |
-| 14 | Conciliação — evidência de correção de saldo | ✅ concluída |
-| 15 | Jobs — CronJob Helm + 5 CLIs + defesa `assertKnownBrand` (sem RLS) | ✅ concluída |
-| 16 | Contrato do archetype (prefixo/Swagger/health/decimal) | ✅ concluída |
-| 17 | Fechamento — e2e completo, quality gates, cutover | pending |
+**Padrões de módulo:** reuso cruzado entre `finance-cash-balance`/`finance-reconciliation` é sempre
+provider exportado + módulo importado, nunca import direto de arquivo interno do outro módulo.
+Enhancer (`@UseInterceptors` etc.) que depende de repositório TypeORM de outro módulo precisa que o
+módulo de origem reexporte o próprio `TypeOrmModule`, não só a classe do enhancer. `:id` das rotas de
+mutação de item usa `ParseIntPipe` (SERIAL), nunca `ParseUUIDPipe`. Coluna nova é sempre `snake_case`
+explícito via `name:`. Variável de ambiente nova do Finance nunca tem default perigoso no Joi
+(fail-fast).
 
-### Decisões já fechadas para esta trilha (não reabrir sem novo ADR)
+**Gotchas de plataforma (TypeORM/Postgres):** `repo.create({...})` grava `undefined` explícito em
+toda coluna omitida (`useDefineForClassFields`) — `decimalTransformer` converte isso em `NULL`,
+ignorando `default` da coluna; sempre passar valor explícito para colunas com `default`. Coluna
+`type: 'date'` via `repo.find()`/`QueryBuilder` volta `string 'YYYY-MM-DD'`, mas `dataSource.query()`
+(raw SQL) devolve `Date` do driver `pg` puro — usar `::text` no `SELECT` ao agrupar/comparar por data
+em query raw. Lock real de concorrência em teste precisa de `QueryRunner` mantendo a transação aberta
+de propósito — `Promise.all` de chamadas de alto nível termina rápido demais para gerar contenção
+genuína (dá falso-positivo de "lock funcionando").
 
-1. **Contrato de erro:** `GlobalExceptionFilter` será estendido para preservar campos extras do
-   payload da exceção (ex.: `pendingBanks`) além de `{code, message}` — decisão da Fase 03.
-2. **Readiness:** verifica só PostgreSQL. ClickHouse/Trio **não entram** no readiness — o módulo
-   degrada de propósito quando eles caem (tela de balanço continua editável sem KPI); indisponibilidade
-   de dependência de outro time nunca deve remover o pod do tráfego.
-3. **Crons:** **nunca portamos `@nestjs/schedule`/`@Cron` in-process.** A execução agendada é só
-   **CronJob do Kubernetes** invocando os CLIs (`reconcile`, `trio:capture` — Fase 15) — evita, por
-   construção, a duplicação de trabalho contra a Trio que `@Cron` in-process teria com
-   `replicaCount: 2`.
-4. **PK das 8 tabelas novas:** `SERIAL` (regra 7 do archetype), não UUID. Nenhuma garantia de negócio
-   depende do tipo — todo upsert é por chave natural (`reference_date`+`brand`, etc.).
-5. **Marca ≠ tenant:** as tabelas do Finance **não** usam a RLS de tenant único do esqueleto — o
-   isolamento por marca (até 3 simultâneas por request) vive inteiramente na camada de aplicação
-   (`BrandAccessService`), sem RLS nenhuma nas tabelas do Finance. A ideia original (RLS com o slug
-   da marca como GUC, só no caminho job) foi **reavaliada na Fase 15** e descartada: com `FORCE ROW
-   LEVEL SECURITY` ativo, toda leitura/escrita sem o GUC setado — inclusive as 14 rotas HTTP, que não
-   usam GUC nenhum — passaria a ver zero linhas. A defesa em profundidade do caminho job (jobs/CLIs
-   sem guard nenhum hoje) é uma asserção de aplicação (`assertKnownBrand`), não RLS — ver Fase 15.
-6. **`TRIO_AMOUNT_DIVISOR` = 100 (centavos)** — ✅ confirmado pelo usuário na PARADA HUMANA da Fase 06
-   (2026-09-01), alinhado com a documentação do cliente Trio. Registrado em `INFRA-FINANCE.md` §4.2 e
-   `REGRAS-NEGOCIO-ROTAS.md`. `.env`/`.env.example` locais atualizados; o Secret/ConfigMap real de
-   homologação/produção está fora do alcance desta sessão.
-7. **Fail-fast em tudo, sem exceção — convenção consolidada na Fase 03:** nenhuma das 14 variáveis
-   novas do Finance tem default de valor perigoso no Joi. Em particular `TRIO_AMOUNT_DIVISOR` é
-   `.required()` (`Joi.number().valid(1, 100)`), nunca `.default(1)` — mesmo já validado como "ambíguo,
-   PARADA HUMANA" no item 6, o boot cai sem ela em vez de assumir silenciosamente. Vale para toda
-   variável nova das Fases 04–17: default só quando o valor for inócuo (ex.: `CLICKHOUSE_DATABASE`),
-   nunca quando errar o valor custa 100× o valor real.
-8. **`match_key` padronizado como `snake_case` — convenção consolidada na Fase 04.** A origem tinha
-   `reconciliation_runs."matchKey"` sem `@map` (pegadinha real, `DADOS-FINANCE.md` §2.1); nesta
-   trilha a coluna nasce `match_key` desde o início. Vale como padrão para qualquer coluna nova: nome
-   de coluna é sempre `snake_case` explícito via `name:`, sem excecão "porque a origem fez diferente".
-9. **ADR-FINANCE-3 — `haveNoCycles()` não distingue `import type` de import de valor
-   (`architecture.spec.ts`, Fase 04):** as 2 pastas `entities/` do Finance
-   (`finance-cash-balance/entities/**`, `finance-reconciliation/entities/**`) ficam de fora do escopo
-   da regra geral de ciclos, porque o TypeORM exige relação bidirecional real
-   (`@OneToMany`+`@ManyToOne`) entre `CashBalanceDay↔CashBalanceDaily` e
-   `ReconciliationRun↔ReconciliationItem`, o que sempre cria um ciclo de ARQUIVO (mesmo quando um dos
-   lados importa a classe irmã só como tipo). Duas regras adicionais garantem que o lado "pai" nunca
-   importa a classe "filha" como valor (só `import type`) — o ciclo real de valor continua proibido.
-   Decisão do usuário entre 3 opções (as outras eram remover as relações inversas, ou tipar sem
-   importar a classe irmã). Se um par de entidades novo (Fases 07+) tiver o mesmo padrão bidirecional,
-   este é o precedente a seguir — adicionar a pasta à exclusão + as 2 regras de `import type`, não
-   inventar uma solução nova.
-10. **Auditoria automática via `AuditInterceptor` por módulo, não global — decisão da Fase 09.**
-    `finance_audit_logs` (entidade desde a Fase 04) é exclusiva do Finance; o interceptor é registrado
-    como provider em `cash-balance.module.ts` e aplicado via `@UseInterceptors(AuditInterceptor)` no
-    controller — nunca em `main.ts`/`app.module.ts` (isso auditaria também as rotas do módulo
-    `[EXEMPLO]`/petshop na mesma tabela). A Fase 13 (Conciliação) precisa decidir como reusar a mesma
-    classe para suas rotas de mutação (hoje ela só resolve `FinanceAuditLog` via
-    `TypeOrmModule.forFeature` do `cash-balance.module.ts`).
-11. **`registerBrand` lê os saldos manuais confirmados sob `SELECT ... FOR UPDATE`, dentro da própria
-    transação de escrita — decisão da Fase 09, corrigindo uma race condition real encontrada pelo
-    `/code-review`.** `CashBalanceRepository.registerBrand` (Fase 07) mudou de assinatura:
-    `registerBrand(params, resolveManualBalances)` — o callback (`extractManualBalances`, no use-case)
-    só é chamado depois de `lockBankEntries` travar as linhas de `cash_balance_bank_entries` do
-    `daily`, nunca antes da transação. Qualquer escrita nova que combine "ler um agregado confirmado
-    por fora" + "escrever um snapshot calculado a partir dele" precisa do mesmo padrão (ler sob lock,
-    dentro da mesma transação da escrita) — ler fora e só depois abrir a transação de escrita é
-    exatamente a classe de bug (*lost update*) que este padrão fecha.
-12. **`ReconciliationModule` importa `CashBalanceModule` para reusar `TrioBankingClient` — decisão da
-    Fase 12, primeira dependência real entre os 2 módulos de negócio do Finance.** `TrioBankingClient`
-    (cliente da bisseção, Fase 06) foi adicionado a `providers`+`exports` de `cash-balance.module.ts`
-    (não estava em nenhum dos dois antes — nenhum use-case do balanço de caixa precisava injetá-lo
-    diretamente até aqui). `reconciliation.module.ts` importa `CashBalanceModule` nos `imports` e usa a
-    classe exportada — nunca duplica o cliente Trio nem a lógica de bisseção. Precedente: qualquer
-    reuso futuro entre os dois módulos de negócio segue o mesmo padrão (provider exportado + módulo
-    importado), nunca import direto de arquivo interno do outro módulo (entidade, repositório,
-    use-case) — só de uma classe que o `exports:` do módulo alvo declara explicitamente.
-13. **`:id` das rotas `resolve`/`reopen` usa `ParseIntPipe`, não `ParseUUIDPipe` — decisão da Fase 13,
-    corrigindo uma inconsistência real do `FASE-13.md` original.** O texto do planejamento citava
-    `ParseUUIDPipe` (e o script de teste orgânico usava um placeholder UUID), mas
-    `ReconciliationItem.id` é `SERIAL` desde a Fase 04 (decisão 4 — nenhuma tabela do Finance usa UUID
-    como PK). Resolvido com `ParseIntPipe` nas 2 rotas; o placeholder do script passou a ser um
-    inteiro inexistente (`999999999`).
-14. **`AuditInterceptor` é reusado pelas rotas de mutação da Conciliação via export de
-    `cash-balance.module.ts` — decisão da Fase 13, resolvendo a pendência explícita da decisão 10.**
-    `AuditInterceptor` entrou em `exports`, mas isso não bastou por si só: `@UseInterceptors(Classe)`
-    resolve as dependências do enhancer no container do módulo que **declara o controller**
-    (`ReconciliationModule`), não no módulo de origem da classe — descoberta empírica ao subir a app
-    (`UnknownDependenciesException` em `FinanceAuditLogRepository`). A correção foi reexportar o
-    próprio `TypeOrmModule` (não um token específico) de `cash-balance.module.ts`, o que reexporta
-    todas as suas entidades registradas via `forFeature` para qualquer módulo importador. Precedente:
-    qualquer enhancer (`@UseGuards`/`@UseInterceptors`/`@UsePipes` com classe) que dependa de um
-    repositório TypeORM de outro módulo precisa desse padrão — exportar só a classe do enhancer não
-    é suficiente se a dependência transitiva dela não estiver visível no módulo consumidor.
-15. **`CorrectionEvidenceService` é um serviço próprio, não um 6º método de `ReconciliationService`
-    — decisão da Fase 14.** A responsabilidade é outra: `ReconciliationService` serve o estado já
-    calculado da conciliação (leitura do Postgres), enquanto `CorrectionEvidenceService` consulta o
-    warehouse sob demanda para investigar uma pendência específica — mesma divisão que o balanço de
-    caixa já fazia entre `read`/`registry`. `SearchCorrectionsUseCase.execute` é o único ponto de
-    acesso ao ClickHouse desse fluxo; `ApplyCorrectionMatchesUseCase` **reusa** essa chamada (nunca
-    reimplementa a consulta) e filtra pelo **primeiro** candidato de cada pendência — nunca desce a
-    lista em busca de um exato mais abaixo. `PARTIAL` nunca é `exact: true`, por construção em
-    `toCandidateView` (`search-corrections.use-case.ts`). Precedente: qualquer rota futura que
-    precise "ver o mesmo que outra rota viu antes de agir sobre isso" injeta o use-case de leitura e
-    chama `.execute()` com os mesmos parâmetros — nunca duplica a query só porque o efeito é outro.
-16. **RLS no caminho job — ✅ confirmado pelo usuário na PARADA da Fase 15 (2026-09-02), opção 1 das
-    3 apresentadas.** Fecha, com decisão explícita ao vivo, o que o item 5 já antecipava: nenhuma
-    tabela do Finance ganha `ENABLE`/`FORCE ROW LEVEL SECURITY`. A defesa em profundidade do caminho
-    job/CLI é `assertKnownBrand(key)` (`cash-balance.constants.ts`), chamada em `parseArgs` dos 5
-    CLIs **antes** de `NestFactory.createApplicationContext` resolver qualquer use-case — uma marca
-    fora do catálogo nunca chega perto de uma escrita. `CLOSING_BALANCE_SOURCE` (token do Ports &
-    Adapters da Fase 07, nunca provido até aqui) passou a resolver para `TrioPointInTimeBalanceSource`
-    em `cash-balance.module.ts` — só nesta fase ganhou um consumidor real (`CaptureTrioClosingUseCase`).
-    Precedente: qualquer policy de RLS futura nas tabelas do Finance é ADR novo, não reabertura
-    silenciosa desta decisão — precisaria vir com o interceptor HTTP equivalente (opção 2, nunca
-    implementada) para não quebrar as 14 rotas que hoje não usam GUC nenhum.
+**Gotchas de tooling (Jest 30/ESLint):** `--verbose` não lista teste que passou — usar `--json
+--outputFile=<tmp>` + `jq` (nunca capturar `--json` do stdout direto quando o código usa
+`Logger`/`console`, que contamina o blob). Flag de filtro é `--testPathPatterns` (plural). `@typescript-eslint/unbound-method`
+em `expect(objeto.metodo)` — corrigir com `jest.spyOn`, não extrair para `const`. `sonarjs/todo-tag`
+dá falso positivo em "todo"/"toda" como pronome em português — reescrever a frase, nunca suprimir.
 
-## Aprendizados críticos
-
-- **Fase 01:** Jest 30 não imprime mais nomes de teste que passaram no reporter `--verbose` (só
-  detalha testes que falham) — qualquer script de teste orgânico que faça `grep` na saída
-  `--verbose` esperando nomes de cenário precisa usar `--json` + `jq` (`testResults[].assertionResults[].fullName`)
-  em vez disso. Ver `scripts/dominio-conciliacao/FASE-01-TESTE-ORGANICO.sh`.
-- **Fase 01:** os artefatos de planejamento (os 17 `FASE-*.md`, este `CLAUDE.md` e
-  `scripts/update-phase-cost.js`) referenciavam `docs/backend/fases/` — diretório que nunca existiu.
-  Os artefatos reais sempre estiveram em `docs/migracao-finance/fases/`. Corrigido nos 19 arquivos
-  na Fase 01; se algum documento novo copiar o padrão antigo, o path certo é
-  `docs/migracao-finance/fases/`.
-- **Fase 01:** `BrandKey` (tipo definido em `cash-balance.constants.ts`, só criado na Fase 07) foi
-  removido do escopo do `reconciliation.types.ts` portado nesta fase — só os tipos efetivamente
-  exercitados pelo domínio testado (`Movement`, `SettledMovement`, `SideTotals`, `FlowMatch`,
-  `RunTotals`, `CorrectionConfidence`) foram portados agora. As views que dependem de `BrandKey`
-  (`ReconciliationBrandView`, `ReconciliationHistoryView`, `RunOutcome`, `CorrectionApplyView`,
-  `CorrectionSearchView`) devem ser portadas só quando a fase que as consome (13/14) rodar, quando
-  `BrandKey` já existir.
-- **Fase 02:** `scripts/update-phase-cost.js` recalcula `totalCostUsd`/`projectedTotalCostUsd`/
-  `summary.completed`/`summary.pending`, mas **não** recalcula `summary.percentComplete` nem
-  `summary.hoursCompleted`/`hoursRemaining` — ficam presos no valor anterior se não forem ajustados
-  à mão. O comentário no topo do arquivo pede para não editar a lógica compartilhada (fonte única no
-  skill `criar-fase`), então o ajuste é manual a cada fase: `percentComplete = completed/17*100` e
-  `hoursCompleted = soma de estimatedHours das fases completed` (não há tracking de `actualHours`
-  real). Repetir esse ajuste manual nas fases 03–17.
-- **Fase 02:** o mesmo padrão de tipo provisório da Fase 01 (`BrandKey`) se repetiu — `BrandKey` e
-  `BankType` foram declarados localmente em `cash-balance.types.ts` (`BrandKey = string`) em vez de
-  importados de `cash-balance.constants.ts`, que só existe na Fase 07. `buildKpiCard` usa a própria
-  chave da marca como `label` (sem lookup em `BRANDS`) até lá.
-- **Fase 03:** o script orgânico do próprio `FASE-03.md` tinha o mesmo defeito documentado na Fase 01
-  (`grep` na saída `--verbose` do Jest 30, que não lista testes que passaram) — o template da fase não
-  herdou a correção já registrada. Corrigido para `--json` + `jq` no
-  `scripts/esqueleto-financeiro/FASE-03-TESTE-ORGANICO.sh`; qualquer novo script orgânico deve nascer
-  já usando esse padrão, não copiar o texto literal do `FASE-*.md` sem revisar.
-- **Fase 03:** Jest 30 também renomeou a flag de filtro de suíte: `--testPathPattern` (citada nos
-  comandos de regressão dos `FASE-*.md`) não existe mais — é `--testPathPatterns`. Mesma família do
-  problema do `--verbose`; usar a flag nova em qualquer comando de regressão futuro.
-- **Fase 03:** a regra `sonarjs/todo-tag` do ESLint dá falso positivo em comentários em português que
-  usam a palavra "Todo"/"todo" como pronome ("todo o módulo", "todo valor monetário") — o linter casa
-  com o token em inglês `TODO` case-insensitive. Ao portar comentários literalmente da origem
-  (`date.util.ts`, `env.validation.ts`), reescrever a frase preservando o sentido em vez de suprimir a
-  regra.
-- **Fase 03:** 15 erros de `npm run lint` já existiam em código das Fases 01/02
-  (`finance-cash-balance/domain/**`, `finance-reconciliation/domain/**`) antes desta fase — nenhum
-  arquivo tocado pela Fase 03 tem erro de lint. Ficam registrados aqui como débito conhecido, não
-  corrigido (fora do escopo desta fase); decisão do usuário sobre quando limpar.
-- **Fase 03:** `scripts/finance-dev-stubs.js` e `src/common/utils/{date,tax-number}.util.ts` foram
-  portados literalmente de `/home/feh/sayplus-modules/finance` (`finance-api` + `scripts/dev-stubs.js`
-  da origem, presentes no disco local) — não havia cópia desses arquivos dentro deste repositório
-  antes da Fase 03.
-- **Fase 04:** o script orgânico do próprio `FASE-04.md` tinha um bug de contagem de tabelas —
-  `table_name LIKE '%cash_balance%' OR ... OR table_name = 'finance_audit_logs'` sem parênteses
-  (precedência `AND`/`OR` errada) e o padrão `%cash_balance%` não cobre `trio_closing_balances`,
-  então a contagem real dava 7, nunca 8. Corrigido para uma lista `IN (...)` com os 8 nomes exatos.
-  Mesma categoria de defeito já visto em scripts orgânicos anteriores — o template de um `FASE-*.md`
-  não é confiável sem rodar contra a implementação real.
-- **Fase 04:** não existia `.env` no checkout (só `.env.example`/`.env.test`) — `npm run
-  migration:run` só funciona com `.env` real (`data-source.ts` carrega `.env` quando `NODE_ENV !==
-  'test'`). Criado localmente via `cp .env.example .env` (gitignorado). Qualquer fase futura que
-  precise rodar migration precisa desse `.env` local.
-- **Fase 04:** entidades TypeORM com relação bidirecional real entre arquivos-irmãos colidem com
-  `haveNoCycles()` do `architecture.spec.ts`, porque a regra não distingue `import type` de import de
-  valor. Ver decisão 9 (ADR-FINANCE-3) acima — é o precedente para qualquer par de entidades novo com
-  o mesmo padrão.
-- **Fase 04:** enums de coluna (`CashBalanceDayStatus` etc.) não podem morar dentro de `entities/` —
-  a regra "entities/ só contém `*.entity.ts`" (já existente, não é do Finance) rejeita qualquer outro
-  arquivo ali. Ficam na raiz do módulo (`cash-balance.enums.ts`, `reconciliation.enums.ts`).
-- **Fase 04:** `up()` de uma migration com muitas tabelas bate no limite de 80 linhas por função do
-  ESLint (`max-lines-per-function`) — não há exceção para migrations no `eslint.config.mjs` (só para
-  `*.spec.ts`/`test/**`). Resolvido dividindo `up()` em métodos privados por sub-domínio, mantendo
-  uma migration/classe só (a decisão de "migration única" é sobre o arquivo, não sobre o tamanho da
-  função).
-- **Fase 04:** `sonarjs/todo-tag` deu falso positivo de novo (mesma causa da Fase 03: "todo" como
-  pronome em português, ex. "cada upsert" tinha sido escrito como "todo upsert").
-- **Fase 04:** a seção "Validação no banco" do `FASE-04.md` cita "as 3 FKs" mas o próprio texto de
-  `cash-balance-brand-snapshot.entity.ts` (mesma fase) e `DADOS-FINANCE.md` §3.4 exigem uma 4ª FK
-  (`cash_balance_brand_snapshots.daily_id → cash_balance_daily.id`, 1:1). Implementada como FK real —
-  a contagem "3" no texto de validação é omissão, não decisão de excluir. Mesma categoria do
-  "8 permissões" vs. 7 reais da Fase 03: quando a prosa de um `FASE-*.md` diverge do código
-  explicitamente especificado na mesma fase, o código vale.
-- **Fase 05:** `stat(1)` (`Birth`) não é evidência confiável de ordem histórica de criação de arquivo
-  nesta sessão — a ferramenta de edição usada aqui grava via temp-file+rename, o que reseta
-  Birth/Change do inode a cada edição subsequente. Um arquivo editado depois de escrito pela primeira
-  vez passa a mostrar `Birth` igual ao horário da ÚLTIMA edição, não da criação original; comparar
-  `Birth` entre dois arquivos com históricos de edição diferentes pode inverter a ordem real dos
-  eventos. Uma verificação adversarial baseada nisso reprovou (incorretamente) o critério "RED antes
-  da implementação" da Fase 05. Resolvido com evidência decisiva e reproduzível: mover a pasta
-  implementada para fora do repositório, reexecutar o script confirmando falha real, restaurar e
-  confirmar sucesso real — não depende de metadado de filesystem. Se uma verificação adversarial
-  futura citar timestamp de arquivo como prova de ordem, preferir esse tipo de teste decisivo a
-  confiar em `stat`.
-- **Fase 05:** Jest 30 com Nest `Logger` ativo contamina `--json` no stdout — o `Logger.warn`/`error`
-  do NestJS escreve no mesmo stdout que o `--json` do Jest, produzindo um blob não-parseável por
-  `jq` mesmo redirecionando stderr. Correção: `--json --outputFile=<tmp>` (grava o relatório limpo em
-  arquivo, ignora o que for escrito em stdout) em vez de capturar `--json` da saída padrão. Mesma
-  categoria do gotcha `--verbose` da Fase 01 — qualquer script orgânico futuro que precise do
-  relatório JSON do Jest deve usar `--outputFile`, nunca capturar stdout diretamente quando o código
-  sob teste usa `Logger`/`console`.
-- **Fase 06:** testar o teto `REQUEST_BUDGET` (20.000) da bisseção da Trio exige um mock de
-  `has_more` condicionado ao tamanho real da janela (comparação lexicográfica dos timestamps ISO de
-  largura fixa, que reflete ordem cronológica) — um mock "sempre `true`" incondicional nunca atinge o
-  teto: a varredura usa uma pilha (LIFO), então sempre desce pelo galho mais à esquerda até
-  `start === end`, batendo no erro de "janela indivisível" em poucas iterações (profundidade
-  `log2(tamanho)`), nunca no teto de requisições. Só uma janela onde `has_more` depende do tamanho de
-  cada nó (verdadeiro sempre que o nó > 1) produz exploração ampla o bastante (árvore binária
-  completa) para ultrapassar 20.000 chamadas. Qualquer teste futuro de teto de requisições em
-  bisseção precisa desse padrão, não de um mock incondicional.
-- **Fase 06:** `accountIdFor()`/`BrandKey` adaptados para usar o que já existe no destino em vez do
-  catálogo `BRANDS` da origem (só chega na Fase 07) — `accountIdFor` lê direto de
-  `trioConfig.accountIds`, e `BrandKey` foi importado de `cash-balance.types.ts` (existente desde a
-  Fase 02) em vez de redeclarado localmente, como o texto do `FASE-06.md` sugeria. Mesma categoria do
-  padrão provisório já registrado nas Fases 01/02: preferir o tipo/valor já existente no destino a
-  duplicar.
-- **Fase 06:** `@typescript-eslint/unbound-method` dispara em `expect(objeto.metodo)` sempre que o
-  método é declarado com sintaxe de método (não `propriedade: () => T`) no `.d.ts` da lib — caso de
-  `axios.create`. Extrair para uma `const` antes do `expect` não resolve (a regra ainda vê a leitura
-  desacoplada na atribuição); a correção é `jest.spyOn(objeto, 'metodo')`, que não dispara a regra
-  porque o nome do método é passado como string, não como acesso de propriedade.
-- **Fase 07:** confirmado empiricamente contra Postgres real (script descartável, não suposição):
-  coluna `type: 'date'` do TypeORM/`pg` volta como `string` `'YYYY-MM-DD'`, nunca `Date` — diferente
-  da origem em Prisma, que exigia `toDateOnly`/`fromDateOnly` em toda borda. `reference_date` trafega
-  como string do início ao fim em `cash-balance.repository.ts`, sem conversão. Vale para qualquer
-  coluna `date` nova nas fases seguintes.
-- **Fase 07:** `cash-balance.repository.ts` bateu no `max-lines` (400) do ESLint com os 13 métodos
-  literais da origem — dividido em 3 arquivos por responsabilidade, não por tamanho arbitrário:
-  `cash-balance.repository.ts` (API pública da classe, injetável), `cash-balance.repository-reads.ts`
-  (leituras puras, funções livres recebendo `DataSource`), `cash-balance.repository-upserts.ts`
-  (upserts elementares, funções livres recebendo o `EntityManager` transacional). Precedente para
-  qualquer repositório novo que se aproxime do limite: extrair por responsabilidade (leitura/escrita
-  elementar) antes de simplesmente cortar comentários.
-- **Fase 07:** `trioAccountEnvKey` do `BrandConfig` da origem não foi portado — ficaria sem nenhum
-  consumidor real, já que `TrioBankingClient.accountIdFor()` (Fase 06) já lê `trioConfig.accountIds`
-  direto pela própria `BrandKey`, sem precisar do nome da variável de ambiente.
-- **Fase 07:** o texto do `FASE-07.md` citava só 2 arquivos (`closing-balance-source.port.ts`,
-  `kpi-card.util.ts`) para ajustar o import provisório de `BrandKey` — na prática eram 4 (os outros 2,
-  `trio-banking.client.ts` e `trio-point-in-time-balance.source.ts`, da Fase 06, tinham o mesmo
-  problema). Mesma categoria de omissão de prosa já vista nas Fases 03/04: quando o `FASE-*.md` lista
-  uma correção, verificar por `grep` todos os sites reais antes de assumir que a lista está completa.
-- **Fase 07:** processo — a implementação desta fase foi escrita antes do script de teste orgânico
-  (falha do processo RED-antes-da-implementação, mesma categoria da Fase 05). Corrigido com o mesmo
-  teste decisivo: mover os arquivos novos para fora do repositório, reexecutar o script confirmando
-  falha real, restaurar e reconfirmar GREEN. RED genuíno e verificável, embora fora de ordem — mas o
-  objetivo é não repetir a inversão de ordem numa fase futura, não só saber corrigi-la depois.
-- **Fase 08:** o texto do "Pré-requisito" do próprio `FASE-08.md` especulava que a regra de allowlist
-  de `axios` em `architecture.spec.ts` cobria só `infrastructure/trio` e precisaria de ajuste antes da
-  fase — o Pre-flight com Haiku confirmou que a regra já incluía `infrastructure/platform/**` desde a
-  Fase 03. Mesma categoria de prosa desatualizada já vista nas Fases 03/04/07: o Pre-flight existe
-  exatamente para evitar uma correção desnecessária baseada em suposição do template.
-- **Fase 08:** primeira Verificação Adversarial de Aceite reprovou por teste tautológico — nenhum
-  teste em `platform-identity.service.spec.ts` fazia asserção sobre o **conteúdo** do mapeamento
-  `tenant.slug → brand.key` (`BRANDS.flatMap`), só contagem de chamadas HTTP e tipo de exceção; o
-  teste equivalente em `brand-access.service.spec.ts` passaria mesmo com o mapeamento quebrado, porque
-  o mock de `PlatformIdentityService` já injetava o resultado pós-mapeamento (`BrandAccessService.
-  resolveBrands` é um passthrough sem lógica própria). Corrigido com um teste novo que mocka 2 tenants
-  (1 válido + 1 sem correspondência no catálogo) e verifica o array exato devolvido. Qualquer teste de
-  um service que só repassa (passthrough) o retorno de outro precisa deixar explícito no nome do teste
-  que cobre repasse, não a lógica de quem produz o dado — a cobertura real do comportamento fica no
-  arquivo que a implementa.
-- **Fase 09:** `finance_audit_logs` (auditoria automática, §1.6 de `REGRAS-NEGOCIO-ROTAS.md`) não
-  estava no escopo de nenhum `FASE-*.md` até esta fase, embora a entidade existisse desde a Fase 04
-  com o comentário explícito "extraídos da URL pelo interceptor de auditoria (Fase futura)". Detectado
-  como inconsistência real (não suposição) entre o plano da fase e as regras transversais — protocolo
-  de decisão (3 opções), usuário escolheu implementar o `AuditInterceptor` agora. Ver decisão 10.
-- **Fase 09:** `@AuthToken()` decorator não existia no destino (a origem tinha; nenhum `FASE-*.md`
-  listava esse arquivo) — criado em `src/auth/auth-token.decorator.ts`, mesmo padrão de
-  `current-user.decorator.ts`. Qualquer rota futura que precise repassar o Bearer bruto a uma
-  integração externa (não o payload decodificado) usa este decorator, não reinventa a extração.
-- **Fase 09:** escalonamento com `/code-review` (exigido pelo `FASE-09.md` por a fase tocar
-  permissões/isolamento por marca) encontrou 4 achados reais de uma revisão que, à primeira vista,
-  "passava todos os testes" — reforça que testes verdes não substituem revisão adversarial dedicada
-  em fases de alto risco. O mais grave: `RegisterBrandUseCase` lia saldos confirmados fora de qualquer
-  transação/lock antes de escrever, permitindo *lost update* contra uma confirmação concorrente. Ver
-  decisão 11 — qualquer combinação futura de "ler agregado confirmado por fora + escrever snapshot
-  calculado dele" precisa nascer com o mesmo padrão de lock, não como capítulo de correção posterior.
-- **Fase 09:** o primeiro teste escrito para a race condition (`Promise.all` entre duas chamadas de
-  repositório completas, comparando o valor final persistido) **não era decisivo** — removendo o
-  `.setLock('pessimistic_write')` da produção, o mesmo teste continuou passando 5/5 execuções seguidas
-  (coincidência de agendamento do Node/driver, as duas operações completas nunca chegavam a contender
-  de fato pelo lock). Mesma categoria de falso positivo de verificação já registrada nas Fases 05/07 —
-  a correção foi reescrever com controle explícito de transação (`QueryRunner` mantendo a trava aberta
-  de propósito, forçando a escrita concorrente a bloquear de verdade por um tempo mensurável antes de
-  liberar). Testar lock/concorrência real em Postgres via Testcontainers exige esse padrão — nunca só
-  `Promise.all` de chamadas de alto nível, que terminam rápido demais para gerar contenção genuína.
-- **Fase 10:** bug real confirmado empiricamente contra Postgres real (não suposição):
-  `useDefineForClassFields` (tsconfig) faz `repo.create({...})` do TypeORM gravar `undefined` como
-  propriedade própria em toda coluna não informada no objeto passado — e o `decimalTransformer`
-  converte esse `undefined` em `NULL` explícito no `INSERT`, ignorando o `default: 0`/`default: false`
-  da coluna e violando `NOT NULL`. Afetou `startRun` (as 16 colunas de totais + 2 contagens de
-  `ReconciliationRun`) e `platformReprocessPending` de `ReconciliationItem`. Corrigido zerando
-  explicitamente (`ZERO_TOTALS` em `reconciliation-run.repository.ts`) em vez de confiar no default do
-  banco — o mesmo padrão já existia em `upsertDaily` (Fase 07) mas nunca tinha sido nomeado como regra
-  geral: **qualquer coluna com `default` no Postgres precisa de valor explícito em `repo.create()`**,
-  porque o default do banco só se aplica quando a coluna está ausente do `INSERT`, e `create()` nunca a
-  omite quando a classe tem a propriedade declarada.
-- **Fase 10:** segundo bug real, mesma causa-raiz de classe diferente: `dataSource.query()` (raw SQL)
-  não passa pelo transform de coluna do TypeORM — só `repo.find()`/`QueryBuilder` devolvem `date` como
-  `string` `YYYY-MM-DD` (achado empírico da Fase 07); o driver `pg` puro devolve `Date` para o OID
-  `date`. `countItemsInRange` quebrava a chave `dia|marca` (`${row.reference_date}|${row.brand}`) por
-  isso — corrigido com `reference_date::text AS reference_date` no `SELECT`. Qualquer raw query futura
-  que agrupe ou devolva uma coluna `date` como parte de uma chave/comparação precisa do mesmo cast —
-  `fromDateOnly`/normalização em JS não bastaria sozinha, o cast no SQL é a correção mais direta.
-- **Fase 10:** o mesmo defeito de script orgânico já documentado nas Fases 01/03/05/08 (Jest 30 não
-  lista nomes de teste que passaram no reporter `--verbose`, só detalha falhas) apareceu de novo no
-  próprio texto do `FASE-10.md` — o bloco de script fornecido literalmente na especificação da fase
-  ainda usava `--verbose` + `grep` na saída. Corrigido para `--json --outputFile=<tmp>` +
-  `jq -r '.testResults[].assertionResults[].fullName'` antes de considerar RED/GREEN confiável. Quinta
-  ocorrência do mesmo gotcha copiado de um template desatualizado — vale revisar todo `FASE-*.md`
-  restante (11-17) por esse padrão antes de rodar o script literal fornecido nele.
-- **Fase 10:** `brand`/`bank` ficam tipados como `string` nos 2 repositórios novos, não `BrandKey` —
-  `BrandKey` só existe em `cash-balance.constants.ts` (módulo `finance-cash-balance`), e a decisão 10
-  deste documento proíbe import direto de arquivo de outro módulo (só via service exportado). A coluna
-  da entidade já é `varchar`, então não há perda de garantia no banco; a validação contra o catálogo de
-  marcas conhecidas (`BRANDS`) fica para o use-case da Fase 13, via `BrandAccessService` — mesmo padrão
-  provisório já registrado nas Fases 01/02/06 para tipos que só existem de verdade numa fase posterior.
-- **Fase 11:** `platform-movements.service.ts`/`correction-search.service.ts` portados literalmente da
-  origem — a normalização de marca via `multiIf(brand = 'suprema', 'Suprema', ...)` citada em
-  `DADOS-FINANCE.md` §10 pertence a `fct_kpi_daily`/`fct_sigap_saldo_diario` (lidos por
-  `ClickHouseReadService` do `finance-cash-balance`, Fase 07), que agrupam por marca — não às 5 queries
-  desta fase, que filtram `brand = {marca:String}`/`toString(client_id)` diretamente e nunca agrupam.
-  Nenhuma inconsistência real: a nota de §10 é genérica ao mart, não a esta fase especificamente.
-- **Fase 11:** o script orgânico literal do próprio `FASE-11.md` tinha `grep -n "source_system" ...`
-  sem excluir comentários — casava com o JSDoc que **explica** por que `source_system` não é
-  filtrado (a prosa cita a palavra "source_system" ao justificar a ausência do filtro). Mesma
-  categoria de defeito de template já documentada nas Fases 01/03/04/05/08/10 (o script fornecido no
-  `FASE-*.md` não é confiável sem rodar contra a implementação real) — corrigido restringindo o grep
-  às linhas fora de comentário (`grep -v '^\s*[0-9]*: \?\*'`). O mesmo `grep` puro em código-fonte sem
-  filtrar comentário pode dar falso positivo sempre que a decisão de *não* fazer algo for documentada
-  citando o nome do próprio filtro evitado.
-- **Fase 11:** aplicado preventivamente o fix do Jest 30 (`--json --outputFile` + `jq` em vez de
-  `--verbose` + `grep`, já documentado nas Fases 01/03/05/08/10) ao escrever o script orgânico desta
-  fase, sem esperar o script literal do `FASE-11.md` falhar primeiro — mostra que vale revisar todo
-  `FASE-*.md` restante (12-17) por esse padrão antes de rodar o bloco de script fornecido nele.
-- **Fase 12:** o Pre-flight (Haiku) confirmou um bloqueio real além do que o próprio `FASE-12.md`
-  já antecipava: `TrioBankingClient` não estava nem em `providers` nem em `exports` de
-  `cash-balance.module.ts` (nenhum use-case do balanço de caixa precisava injetá-lo diretamente até
-  esta fase — só `TrioPointInTimeBalanceSource`, que também não é provider de nenhum módulo ainda,
-  fica para a Fase 15/CronJob). Resolvido com a opção (a) já recomendada no próprio plano: adicionar
-  `TrioBankingClient` a `providers`+`exports`. Ver decisão 12.
-- **Fase 12:** a mesma invariante de sessão (Haiku, sobre import cruzado entre módulos) encontrou uma
-  violação real deixada pela Fase 10: `reconciliation-run.repository.spec.ts`/
-  `reconciliation-item.repository.spec.ts` importavam as 6 entidades de
-  `finance-cash-balance/entities/**` só para popular o array `entities: [...]` do `DataSource` de
-  teste (Testcontainers) — nenhuma é usada de fato, porque a migration `FinanceInitialSchema` é SQL
-  explícito (`queryRunner.query`), não depende de metadata de entidade nenhuma para rodar. Corrigido
-  restringindo `entities: [...]` às 2 entidades do próprio módulo (`ReconciliationRun`,
-  `ReconciliationItem`). Precedente para qualquer spec futuro com Testcontainers cobrindo uma
-  migration compartilhada entre módulos: registrar só as entidades que o teste efetivamente toca,
-  nunca copiar a lista inteira de outro módulo por conveniência/cópia do padrão de um spec vizinho.
-- **Fase 12:** `TrioMovementsService.accountIdFor` precisa repassar `brand: string` (decisão das Fases
-  10/11) para `TrioBankingClient.accountIdFor(brand: BrandKey)`, que exige o tipo mais estrito —
-  resolvido com cast estrutural (`brand as Parameters<TrioBankingClient['accountIdFor']>[0]`) em vez
-  de importar o tipo `BrandKey` de `cash-balance.constants` só para o cast. Vale como padrão sempre
-  que uma chamada cruzada de módulo precisar de um tipo mais estrito do lado importado: preferir
-  derivar o tipo estruturalmente da própria assinatura da função a importar o tipo nominal.
-- **Fase 13:** bug real de configuração encontrado pelo primeiro e2e desta trilha a fazer asserção de
-  valor monetário real ponta a ponta contra os stubs: `.env.test` tinha `TRIO_AMOUNT_DIVISOR=1`,
-  divergindo da decisão 6 (confirmada em `100` na Fase 06 — só `.env`/`.env.example` tinham sido
-  atualizados, `.env.test` ficou esquecido). Sem a correção, todo valor em reais vindo da Trio chegava
-  100× maior no e2e. Corrigido para `100`. Vale revisar `.env.test` sempre que uma decisão de env
-  fail-fast (item 7 desta lista) for confirmada só nos outros arquivos de ambiente.
-- **Fase 13:** `ResolveItemUseCase` concentra as 2 transições de estado da pendência (`resolve()` e
-  `reopen()`), não dois use-cases separados como o `FASE-13.md` original listava — decisão de
-  implementação (não arquitetural) para manter o construtor de `ReconciliationService` em 5
-  dependências (`max-params` do ESLint, que conta `BrandAccessService` + os 4 use-cases restantes).
-  As duas transições compartilham a mesma checagem de posse (`findOwnedItem`: busca por id +
-  autorização pela marca do dado). Precedente: se um novo use-case entraria como 6º parâmetro do
-  service, primeiro verificar se ele compartilha responsabilidade real com outro já injetado antes de
-  desabilitar a regra ou reestruturar o service.
-- **Fase 13:** a Verificação Adversarial de Aceite confirmou os 10 critérios formais mas achou uma
-  lacuna de processo real: nenhuma das 6 classes novas (5 use-cases efetivos + service) tinha
-  `*.spec.ts` colocalizado, diferente de toda fase anterior do `finance-cash-balance`. O `FASE-13.md`
-  original só pedia e2e para esta fase — decisão do usuário (2 opções) foi adicionar os 6 specs antes
-  de fechar, com mocks de repositório (sem infra), cobrindo especificamente: a guarda de reentrância
-  em memória (prova por chamadas síncronas concorrentes, sem precisar de temporizador), a exclusão de
-  `TREASURY` do casamento, `reconciled` falso com `openCount > 0` mesmo em `DONE`, a severidade
-  `NOT_RUN > PENDING` do histórico, e a validação da nota após `trim()`. Vale como lembrete: um
-  `FASE-*.md` que não lista specs unitários para uma fase de use-cases é omissão a verificar contra a
-  convenção geral do projeto, não silêncio = "não precisa" (mesma categoria das omissões de prosa já
-  registradas nas Fases 03/04/07).
-- **Fase 13:** golden dataset do e2e (`scripts/finance-dev-stubs.js`, marca `suprema`, dia
-  `2026-06-15`, `RECON_BANK_ROWS`/`RECON_PLATFORM_*`) validado manualmente via `psql` contra Postgres
-  real antes de travar os números nos testes — `matchedCount=4`, `openCount=7` (2 pendências:
-  1 depósito+1 saque órfãos de cada lado, mais 1 depósito e 4 saques sem chave do lado banco),
-  `resolvedCount=2` (os 2 estornos liquidados automaticamente), `reprocessPendingCount=1`. Confirma
-  a invariante `diferença (banco − plataforma) = crossover + pendências` nos 2 fluxos. Qualquer
-  alteração futura no stub de conciliação precisa recalcular esses números à mão antes de mudar as
-  asserções do e2e — não são arbitrários, vêm de leitura linha a linha do dataset.
-- **Fase 14:** o golden dataset dos 4 débitos manuais (`trio-man-1..4` em `finance-dev-stubs.js`,
-  lado `BANK`/`WITHDRAWAL`, com CPF) já estava preparado no stub **antes** desta fase começar — um
-  para cada caminho da busca de correção: FABIO (45,00, exato via ponte `pix_key`), GISELE (80,00,
-  evidência parcial — correção de 30,00), HELIO (15,00, CPF sem `client_id` conhecido) e IVONE
-  (90,00, exato via coluna `cpf` da própria correção, sem ponte). Números travados no e2e:
-  `searchedCount=4`, `withEvidenceCount=3`, `withoutClientCount=1`, `apply` resolve exatamente 2
-  (FABIO+IVONE), `partialCount=1` (GISELE), `withoutCandidateCount=1` (HELIO). Nenhum teste anterior
-  do arquivo toca `side=BANK, flow=WITHDRAWAL, counterparty_tax_number IS NOT NULL`, então os 4
-  chegam intactos até o describe desta fase — qualquer teste novo que precise desses mesmos itens
-  tem que continuar rodando depois dos blocos de `resolve`/`reopen` já existentes.
-- **Fase 14:** `CorrectionSearchItem.amount`/`ItemCounts.openAmount`/`RangeItemCounts.openAmount`
-  ficam em **reais**, não `amountCents`, na borda repositório↔use-case — inconsistente à primeira
-  vista com a convenção `amountCents` do domínio interno (`Movement`, `CorrectionEntry`), mas é o
-  mesmo padrão já usado por `StoredItem.amount` desde a Fase 10. A conversão para centavos
-  (`toCents`, em `search-corrections.use-case.ts`) acontece só na borda com `findCorrectionCandidates`
-  — mesma linha da origem (`toCents(item.amount)`). Um Pre-flight com Haiku sinalizou isso como
-  possível `BLOQUEADO` por não ter visto o use-case já escrito; confirmado como falso positivo depois
-  de ler o código — vale registrar como precedente: a conversão de unidade na borda repositório/view
-  é esperada e não é o mesmo bug que "esquecer de converter".
-- **Fase 14:** mesmo falso positivo do `sonarjs/todo-tag` já documentado nas Fases 03/04 ("todo" como
-  pronome em português casando com o token `TODO`) apareceu de novo num comentário novo
-  (`search-corrections.use-case.ts`, "Todo CPF..."). Reescrito para "Cada CPF..." — sexta ocorrência
-  do mesmo gotcha; vale revisar todo comentário novo que comece frase com "Todo"/"Toda" antes de
-  rodar lint.
-- **Fase 15:** `helm` não estava instalado no ambiente da sessão — instalado localmente em
-  `~/.local/bin/helm` (binário oficial, sem privilégio de root; `~/.local/bin` já estava no `PATH`
-  padrão do shell). Necessário antes de rodar `helm template` no teste orgânico e na verificação
-  adversarial. Vale checar `command -v helm` no início de qualquer fase futura que precise dele.
-- **Fase 15:** bug real pego antes de commitar, não pelo lint: os 2 CLIs de exportação (`export-trio-
-  statement.ts`, `export-trio-transactions.ts`) escrevem o CSV em `stdout` por padrão (`--out=-`,
-  decisão de INFRA-FINANCE.md §7), mas o `Logger` do Nest (nível `log`) também escreve em `stdout`
-  por padrão — misturaria linha de progresso com linha de CSV no mesmo redirecionamento
-  (`... > extrato.csv`). Corrigido desligando o nível `log` do `NestFactory.createApplicationContext`
-  quando `out === '-'` (mantendo `error`/`warn`, que vão para `stderr`). Qualquer CLI futuro que
-  escreva dado estruturado em `stdout` por padrão precisa do mesmo cuidado — a origem nunca teve esse
-  problema porque sempre escrevia em arquivo (`writeFileSync`), nunca em `stdout`.
-- **Fase 15:** `CLOSING_BALANCE_SOURCE` (token do port criado na Fase 07) nunca tinha sido provido em
-  nenhum módulo — `TrioPointInTimeBalanceSource` existia como classe, mas sem nenhum consumidor real
-  até `CaptureTrioClosingUseCase` (desta fase) precisar dele. Resolvido com
-  `{ provide: CLOSING_BALANCE_SOURCE, useExisting: TrioPointInTimeBalanceSource }` em
-  `cash-balance.module.ts`. Mesma categoria de pendência já documentada na Fase 07 ("fica para a
-  Fase 15/CronJob").
-- **Fase 15:** ao rodar `scripts/conciliacao-correcoes/FASE-14-TESTE-ORGANICO.sh` de novo como
-  regressão manual (fora do fluxo oficial), 3 dos 10 testes "falharam" — não por regressão de código,
-  mas porque o Postgres local via `docker compose` é **persistente** entre execuções, e uma corrida
-  anterior já tinha resolvido (`apply`) as 2 pendências exatas do golden dataset; a segunda corrida
-  via o resultado idempotente correto (`searchedCount:2`, `resolvedCount:0`), não o estado "fresco"
-  que o script assume. O teste oficial da regressão (`npm run test:e2e`, Testcontainers — Postgres
-  efêmero a cada run) passou 36/36 sem ressalva. Vale lembrar: scripts orgânicos com `curl` contra o
-  Postgres de desenvolvimento (`docker compose`) não são idempotentes entre execuções manuais — só o
-  e2e com Testcontainers garante estado limpo a cada rodada.
-- **Fase 16:** auditoria veio GREEN na primeira execução do script orgânico — nenhuma alteração foi
-  necessária em `src/main.ts` ou `src/health/health.controller.ts`. Confirmado: prefixo `/api/v1`
-  dinâmico via `API_PREFIX` (nunca hardcoded), Swagger code-first já lista `cash-balance`/
-  `reconciliation` via `@ApiTags` sem listagem manual, readiness continua só Postgres, as 18 colunas
-  monetárias das 8 entidades do Finance têm `decimalTransformer` (contagem exata confirmada por
-  Haiku) e `overrides.js-yaml` continua aplicado a `@nestjs/swagger`. Nenhuma decisão nova, nenhum
-  ADR — primeira fase da trilha sem nenhum aprendizado de correção real, só confirmação do que as
-  Fases 03/04/06/07/09 já tinham fixado.
+**Verificação:** um `FASE-*.md`/plano pode ter prosa desatualizada ou script de teste com bug —
+confirmar contra o código/infra real (Pre-flight Haiku, grep, ou execução) antes de assumir. Testes
+verdes não substituem `/code-review` em fases que tocam permissões/isolamento por marca — já achou
+achados reais (lost update em `registerBrand`) que os testes não pegavam. Um gate do CI nunca rodado
+de ponta a ponta durante a trilha é um gate DESCONHECIDO, não um gate verde (Fase 17 achou 3 débitos
+pré-existentes só ao rodar os 12 gates de verdade pela primeira vez — ver
+`scripts/fechamento-financeiro/FASE-17-TESTE-ORGANICO.md`).
 
 ## Convenções de teste
 

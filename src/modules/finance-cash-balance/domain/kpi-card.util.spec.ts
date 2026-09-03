@@ -48,6 +48,11 @@ describe('kpi-card.util', () => {
       ['ultra', 0.2],
     ]);
     const card = buildKpiCard(['suprema', 'ultra'], amounts);
+    // Igualdade exata é o propósito deste teste: 0.1 + 0.2 em IEEE754 é
+    // 0.30000000000000004, não 0.3 — só passa se buildKpiCard de fato
+    // arredondar. `toBeCloseTo` esconderia justamente a dízima que o teste
+    // existe para pegar.
+    // eslint-disable-next-line sonarjs/no-floating-point-equality
     expect(card.total).toBe(0.3);
 
     // subtractByBrand não arredonda por si (preserva a precisão bruta da
@@ -58,6 +63,7 @@ describe('kpi-card.util', () => {
       new Map<BrandKey, number>([['suprema', 0.1]]),
     );
     const netDepositCard = buildKpiCard(['suprema'], netDeposit);
+    // eslint-disable-next-line sonarjs/no-floating-point-equality
     expect(netDepositCard.byBrand[0].amount).toBe(0.2);
   });
 });

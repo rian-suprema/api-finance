@@ -7,7 +7,12 @@ import {
   findCorrectionCandidates,
 } from './correction-matcher';
 
-const FIXTURE_PATH = path.join(process.cwd(), 'test', 'fixtures', 'reconciliation-maxima-2026-08-15.json');
+const FIXTURE_PATH = path.join(
+  process.cwd(),
+  'test',
+  'fixtures',
+  'reconciliation-maxima-2026-08-15.json',
+);
 
 interface CorrectionScenario {
   target: CorrectionTarget;
@@ -23,7 +28,7 @@ interface Fixture {
   };
 }
 
-const fixture: Fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8'));
+const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Fixture;
 
 describe('correction-matcher — busca de evidência de correção', () => {
   it('EXACT_SAME_BRAND: valor idêntico na mesma marca → primeiro candidato, exact = true', () => {

@@ -59,6 +59,42 @@ describe('AuditInterceptor', () => {
     expect(repository.insert).toHaveBeenCalledWith(expect.objectContaining({ after: null }));
   });
 
+  it('grava action=RESOLVE para POST reconciliation/items/:id/resolve (reusado pela Conciliação, Fase 17)', async () => {
+    const repository = buildRepository();
+    const interceptor = new AuditInterceptor(repository as never, buildConfig());
+    const req = {
+      method: 'POST',
+      originalUrl: '/api/v1/reconciliation/items/42/resolve',
+      headers: {},
+      user: { sub: 'user-1', tenantId: 'tenant-1', email: 'a@b.com', permissions: [] },
+    };
+
+    interceptor.intercept(buildContext(req), buildHandler(undefined)).subscribe();
+    await flush();
+
+    expect(repository.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'RESOLVE', entity: 'reconciliation' }),
+    );
+  });
+
+  it('grava action=APPLY para POST reconciliation/:brand/corrections/apply (reusado pela Conciliação, Fase 17)', async () => {
+    const repository = buildRepository();
+    const interceptor = new AuditInterceptor(repository as never, buildConfig());
+    const req = {
+      method: 'POST',
+      originalUrl: '/api/v1/reconciliation/suprema/corrections/apply',
+      headers: {},
+      user: { sub: 'user-1', tenantId: 'tenant-1', email: 'a@b.com', permissions: [] },
+    };
+
+    interceptor.intercept(buildContext(req), buildHandler({})).subscribe();
+    await flush();
+
+    expect(repository.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'APPLY', entity: 'reconciliation' }),
+    );
+  });
+
   it('não grava nada para método GET (não é mutação)', async () => {
     const repository = buildRepository();
     const interceptor = new AuditInterceptor(repository as never, buildConfig());

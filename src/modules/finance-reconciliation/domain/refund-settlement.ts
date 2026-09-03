@@ -9,7 +9,7 @@ import type { Movement, SettledMovement, SideTotals } from './reconciliation.typ
  * ── O problema ──────────────────────────────────────────────────────────────
  * Quando o banco devolve um pagamento, o extrato ganha um **crédito** com o
  * mesmo `external_id` do débito original e `ref_type = payment_refund`. Como a
- * classificação por sinal transforma todo crédito em depósito, esse crédito ia
+ * classificação por sinal transforma cada crédito em depósito, esse crédito ia
  * procurar um depósito com a chave de um saque, não achava par e abria pendência
  * "não está na plataforma". Incidente real: saque de R$ 1.000,00 devolvido pelo
  * banco, chave 778446251.

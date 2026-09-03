@@ -210,8 +210,11 @@ export class CashBalanceRepository {
     requiredBrands: number,
     closedBy: string,
   ): Promise<string[]> {
+    // ::text explícito: dataSource.query() (raw SQL) devolve Date do driver `pg`
+    // puro para coluna `date`, nunca string — sem o cast, `.localeCompare` mais
+    // abaixo quebraria (TypeError: a.localeCompare is not a function).
     const counts: { reference_date: string; count: string }[] = await this.dataSource.query(
-      `SELECT reference_date, COUNT(*) AS count
+      `SELECT reference_date::text AS reference_date, COUNT(*) AS count
        FROM cash_balance_daily
        WHERE deleted_at IS NULL AND status = $1 AND reference_date >= $2 AND reference_date <= $3
        GROUP BY reference_date`,

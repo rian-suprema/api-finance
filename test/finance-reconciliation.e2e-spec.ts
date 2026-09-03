@@ -635,4 +635,37 @@ describe('Finance — Conciliação Bancária (e2e)', () => {
       expect(body.resolvedCount).toBe(0);
     });
   });
+
+  /**
+   * Fase 17, cenário 3 / invariante #10 de REGRAS-NEGOCIO-ROTAS.md §7: a nota
+   * do operador sobrevive a uma reexecução da conciliação porque o upsert é
+   * pela chave natural (reference_date+brand+bank+item_key), nunca pelo
+   * run_id — cada `run` cria uma linha nova em reconciliation_runs, mas o
+   * item já tratado não perde o tratamento. Fica ao final do arquivo porque
+   * dispara `run` de novo sobre o golden dataset, o que recalcularia (sem
+   * quebrar) os totais já verificados acima.
+   */
+  describe('Invariante 10 — nota sobrevive à reexecução da conciliação (cenário 3, Fase 17)', () => {
+    it('resolver um item, rodar a conciliação de novo, e a nota + status RESOLVED sobrevivem', async () => {
+      const id = await findOpenItem('PLATFORM', 'DEPOSIT');
+      const note = 'Nota que precisa sobreviver à reexecução — chave natural, não run_id.';
+
+      const resolveRes = await api()
+        .post(`${prefix}/reconciliation/items/${id}/resolve`)
+        .set('Authorization', bearer)
+        .send({ note });
+      expect(resolveRes.status).toBe(204);
+
+      const runRes = await api()
+        .post(`${prefix}/reconciliation/run`)
+        .set('Authorization', bearer)
+        .send({ date: GOLDEN_DATE });
+      expect(runRes.status).toBe(202);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const row = await itemRow(id);
+      expect(row.status).toBe('RESOLVED');
+      expect(row.note).toBe(note);
+    });
+  });
 });

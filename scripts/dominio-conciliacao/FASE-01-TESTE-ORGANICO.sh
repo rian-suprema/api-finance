@@ -13,7 +13,10 @@ JSON_OUT=$(mktemp)
 # O reporter --verbose do Jest 30 não imprime mais o nome de testes que
 # passaram (só de falhas) — --json expõe fullName de cada teste independente
 # disso, e é o que este script usa para confirmar que cada cenário rodou.
-npx jest src/modules/finance-reconciliation/domain --json > "$JSON_OUT" 2>/tmp/fase01-jest.log
+# --outputFile (não stdout): use-cases sob domain/ (ex.: RunReconciliationUseCase)
+# usam o Logger do Nest, que escreve no mesmo stdout e corromperia o JSON
+# capturado por redirecionamento direto (Fase 05, CLAUDE.md — Aprendizados críticos).
+npx jest src/modules/finance-reconciliation/domain --json --outputFile="$JSON_OUT" >/tmp/fase01-jest.log 2>&1
 STATUS=$?
 NAMES=$(jq -r '.testResults[].assertionResults[].fullName' "$JSON_OUT" 2>/dev/null)
 rm -f "$JSON_OUT"

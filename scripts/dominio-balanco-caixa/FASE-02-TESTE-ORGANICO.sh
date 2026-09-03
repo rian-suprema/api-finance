@@ -12,8 +12,10 @@ echo ""
 JSON_OUT=$(mktemp)
 # Jest 30 não imprime nomes de teste que passaram no reporter --verbose (só de
 # falhas) — --json expõe fullName de cada teste independente disso (ver
-# CLAUDE.md, Aprendizados críticos — Fase 01).
-npx jest src/modules/finance-cash-balance/domain --json > "$JSON_OUT" 2>/tmp/fase02-jest.log
+# CLAUDE.md, Aprendizados críticos — Fase 01). --outputFile (não stdout): o
+# Logger do Nest em use-cases sob domain/ corromperia o JSON capturado por
+# redirecionamento direto (Fase 05, CLAUDE.md — Aprendizados críticos).
+npx jest src/modules/finance-cash-balance/domain --json --outputFile="$JSON_OUT" >/tmp/fase02-jest.log 2>&1
 STATUS=$?
 NAMES=$(jq -r '.testResults[].assertionResults[].fullName' "$JSON_OUT" 2>/dev/null)
 rm -f "$JSON_OUT"

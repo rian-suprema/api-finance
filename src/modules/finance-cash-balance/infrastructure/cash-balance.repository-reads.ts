@@ -46,9 +46,11 @@ export async function findLastKnownBalances(
   const result = new Map<BrandKey, Map<string, number>>();
   if (!brands.length) return result;
 
+  // ::text explícito: dataSource.query() (raw SQL) devolve Date do driver `pg`
+  // puro para coluna `date`, nunca string (mesmo gotcha de closeCompleteDays).
   const latestPerBrand: { brand: string; max_reference_date: string | null }[] =
     await dataSource.query(
-      `SELECT brand, MAX(reference_date) AS max_reference_date
+      `SELECT brand, MAX(reference_date)::text AS max_reference_date
      FROM cash_balance_daily
      WHERE brand = ANY($1) AND deleted_at IS NULL AND reference_date < $2
      GROUP BY brand`,

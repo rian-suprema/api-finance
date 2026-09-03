@@ -59,3 +59,45 @@ requires:
       default-deny de ingress habilitado nos values de ambiente; o SRE DEVE
       preencher networkPolicy.ingress.gatewayNamespace antes do 1º deploy
       (vazio = deny-all total, nem o gateway alcança o pod).
+
+  # --- Finance (Fase 17) — 3 dependências externas novas ---------------------
+  # Ver docs/migracao-finance/INFRA-FINANCE.md §10 para o racional completo.
+  - type: external-service # confirmar vocabulário com o SRE
+    purpose: >-
+      ClickHouse do data warehouse — leitura EXCLUSIVA de marts dw_bet.*
+      (fct_kpi_daily, fct_sigap_saldo_diario, fct_deposit, fct_withdrawal,
+      fct_correction). Credencial de leitura concedida pelo time de dados.
+      O serviço DEGRADA (não falha) quando indisponível: por isso NÃO entra
+      no readiness probe — ver INFRA-FINANCE.md §8.
+      Egress necessário: HTTPS para o endpoint do cluster.
+    outputs:
+      env: [CLICKHOUSE_URL, CLICKHOUSE_USER, CLICKHOUSE_DATABASE]
+      secret: [CLICKHOUSE_PASSWORD]
+
+  - type: external-service
+    purpose: >-
+      API bancária da Trio (SaaS de terceiro) — leitura de saldo point-in-time
+      e de extrato. Auth = HTTP Basic (client_id:client_secret).
+      PICO DE TRÁFEGO ATÍPICO: a varredura de extrato por bisseção pode emitir
+      até ~1.000 requisições HTTPS por marca em ~2 min (3 marcas em paralelo),
+      uma vez ao dia. Confirmar com o SRE se NAT gateway/WAF tolera o padrão.
+      Egress necessário: HTTPS 443 para o host da Trio.
+    outputs:
+      env:
+        [
+          TRIO_BASE_URL,
+          TRIO_AMOUNT_DIVISOR,
+          TRIO_ACCOUNT_ID_SUPREMA,
+          TRIO_ACCOUNT_ID_ULTRA,
+          TRIO_ACCOUNT_ID_MAXIMA,
+        ]
+      secret: [TRIO_CLIENT_ID, TRIO_CLIENT_SECRET]
+
+  - type: internal-service
+    purpose: >-
+      API principal SayPlus — GET /auth/me resolve as MARCAS do vínculo do
+      usuário (até 3 por request). É dependência CRÍTICA: sem ela nenhuma rota
+      de negócio do Finance responde (503 "Não foi possível validar as marcas
+      do usuário"). Cache de 60s em memória, por hash SHA-256 do token.
+    outputs:
+      env: [SAYPLUS_API_URL]

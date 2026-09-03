@@ -4,7 +4,12 @@ import path from 'path';
 import { settleRefunds } from './refund-settlement';
 import type { Movement } from './reconciliation.types';
 
-const FIXTURE_PATH = path.join(process.cwd(), 'test', 'fixtures', 'reconciliation-maxima-2026-08-15.json');
+const FIXTURE_PATH = path.join(
+  process.cwd(),
+  'test',
+  'fixtures',
+  'reconciliation-maxima-2026-08-15.json',
+);
 
 interface Fixture {
   platform: Movement[];
@@ -20,7 +25,7 @@ interface Fixture {
   };
 }
 
-const fixture: Fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8'));
+const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Fixture;
 
 describe('refund-settlement — liquidação de estorno', () => {
   const result = settleRefunds(fixture.platform, fixture.bank);

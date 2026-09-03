@@ -17,7 +17,12 @@ const METHOD_ACTIONS: Record<string, string> = {
   DELETE: 'DELETE',
 };
 
-const NAMED_ACTIONS = new Set(['register', 'confirm', 'reopen', 'close']);
+// 'resolve'/'apply' são das rotas de mutação da Conciliação (Fase 13/14, que
+// reusa este interceptor via export do TypeOrmModule — CLAUDE.md decisão 10);
+// sem eles, o rótulo caía no genérico 'CREATE' do método HTTP, perdendo o
+// sentido semântico exatamente nas 2 escritas mais relevantes para auditoria
+// financeira do módulo (achado do /code-review da Fase 17).
+const NAMED_ACTIONS = new Set(['register', 'confirm', 'reopen', 'close', 'resolve', 'apply']);
 
 /** `finance_audit_logs.user_agent` é `varchar(255)` — Postgres rejeita em vez de truncar. */
 const USER_AGENT_MAX_LENGTH = 255;
