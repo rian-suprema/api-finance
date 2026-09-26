@@ -108,6 +108,16 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --ignore-scripts
+      # Stubs das 3 dependências externas (:3100 SayPlus /auth/me, :9001 Trio,
+      # :8123 ClickHouse) — as suítes e2e exigem os três de pé.
+      - name: Sobe os stubs de dev
+        run: |
+          node scripts/finance-dev-stubs.js > stubs.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://localhost:3100/auth/me && exit 0
+            sleep 1
+          done
+          cat stubs.log; echo "::error::stubs não subiram"; exit 1
       - run: npm run test:e2e
 
   build-image:
