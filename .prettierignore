@@ -3,3 +3,11 @@ coverage/
 node_modules/
 package-lock.json
 report/
+
+# Templates do Helm são Go templates, NÃO YAML: `{{- include ... }}` derruba o
+# parser do prettier com SyntaxError. Como o lint-staged casa
+# `*.{json,md,yml,yaml}` em qualquer profundidade (matchBase), sem esta linha o
+# prettier BLOQUEIA o commit de qualquer alteração nos templates.
+# Quem valida estes arquivos é o job helm-validate do CI — helm lint +
+# helm template + kubeconform, que entendem Go template.
+deploy/helm/*/templates/

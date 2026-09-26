@@ -1,0 +1,76 @@
+# ==============================================================================
+# Re-scan de segurança AGENDADO — o heartbeat que o CI por-push não dá.
+#
+# O Trivy lê a base de advisories AO VIVO. Um CVE publicado DEPOIS do último
+# merge deixa a imagem vulnerável sem que uma linha de código mude — e o gate
+# do job `build-image` só reavalia no próximo push. Foi exatamente essa a
+# dinâmica que nos pegou no `npm audit` (multer/js-yaml). Este workflow
+# reconstrói a imagem de `main` e roda o MESMO gate (HIGH/CRITICAL, exit-code 1,
+# mesmo .trivyignore) toda semana, fechando essa janela.
+#
+# Como o scan cobre `os,library` (default), ele re-cobre também as dependências
+# do app — a mesma superfície que o `npm audit` vigia — além do SO da base.
+#
+# NÃO roda quality/e2e/helm de propósito: e2e com Testcontainers tem flaky de
+# cold-start que, num agendamento semanal, viraria vermelho que não é segurança
+# e ensinaria o time a ignorar o alerta. Isto aqui é heartbeat de segurança.
+# Falha do run agendado notifica os admins do repo pela via padrão do GitHub.
+# ==============================================================================
+name: trivy-rescan
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # toda segunda-feira, 06:00 UTC
+  # Disparo manual (aba Actions → Run workflow) — reavaliar sob demanda.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # p/ o SARIF opt-in, se TRIVY_SARIF_UPLOAD estiver ligado
+
+jobs:
+  rescan:
+    name: rescan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build da imagem (sem push — só p/ escanear)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: api-finance:rescan
+
+      # 1) VISIBILIDADE: o relatório completo vai para o Job Summary do run.
+      - name: Scan — relatório para o Job Summary
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: api-finance:rescan
+          format: table
+          output: trivy-report.txt
+          exit-code: '0' # esta camada só reporta; quem bloqueia é o gate
+      - name: Publica o relatório no Job Summary
+        if: always()
+        run: |
+          {
+            echo '## 🔍 Trivy — re-scan agendado de api-finance'
+            echo '```'
+            cat trivy-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 2) GATE: mesmo critério do build-image. Se um CVE HIGH/CRITICAL novo
+      #    surgiu na base desde o último push, o run agendado fica VERMELHO.
+      - name: Scan — gate HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: api-finance:rescan
+          severity: HIGH,CRITICAL
+          # Explícito (é o default do Trivy): bloqueia MESMO CVE sem correção
+          # disponível — o alívio para inexploráveis é só o .trivyignore (com
+          # dono/justificativa/expiração), nunca ignorar por não ter fix.
+          ignore-unfixed: 'false'
+          exit-code: '1'
+          trivyignores: .trivyignore

@@ -32,7 +32,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          command: ['npm', 'run', 'migration:run']
+          # Runner por NODE PURO (dist compilado) — a imagem de produção NÃO tem
+          # npm (toolchain removido no Dockerfile). `npm run migration:run` aqui
+          # falharia no cluster: defeito capturado pela POC de CI/CD (report 03).
+          command: ['node', 'dist/database/migration-runner.js']
           envFrom:
             - configMapRef:
                 name: {{ include "api-finance.fullname" . }}

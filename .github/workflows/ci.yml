@@ -118,7 +118,210 @@ jobs:
             sleep 1
           done
           cat stubs.log; echo "::error::stubs não subiram"; exit 1
-      - run: npm run test:e2e
+      # Roda com --coverage, como no archetype: o `test:cov` do quality-validation só
+      # executa `*.spec.ts` sob `rootDir: src`; controller e repositório só são
+      # exercitados aqui.
+      - run: npm run test:e2e:cov
+
+  # ============================================================================
+  # commit-messages — o ÚNICO gate em que `--no-verify` era definitivo.
+  #
+  # O hook `commit-msg` roda commitlint na máquina do dev, e nada reconferia
+  # depois: quem passa `--no-verify` (ou clona sem rodar `npm install`, que é
+  # quando o hook nem existe) grava mensagem fora do Conventional Commits e o
+  # CI nunca reclamava. Este job confere o RANGE empurrado, commit por commit.
+  #
+  # `fetch-depth: 0` é obrigatório: sem o histórico, o range não resolve.
+  #
+  # TRÊS DECISÕES ANTI-VACUIDADE, e as três nasceram de buraco medido:
+  #
+  #   1. UM passo só, que descobre o range sozinho. A primeira versão tinha um
+  #      passo `if: pull_request` e outro `if: push` — e em `workflow_dispatch`
+  #      NENHUM dos dois rodava: o job ficava VERDE sem conferir mensagem
+  #      nenhuma. Gate que passa sem executar é pior que gate ausente, porque
+  #      alguém conta com ele;
+  #   2. RANGE VAZIO É FALHA, não sucesso. É a mesma régua do `deploy-path`,
+  #      que recusa zero migrations compiladas;
+  #   3. a exceção do Dependabot é por AUTOR do commit, não por texto da
+  #      mensagem. Ele gera assunto em sentence-case (`Bump jscpd in the ...`),
+  #      que a regra `subject-case` proíbe, e isso reprovava TODO PR dele
+  #      (medido em 11/09/2026). A primeira correção usava `ignores` no
+  #      `commitlint.config.mjs` casando o TEXTO — e qualquer pessoa que
+  #      escrevesse `chore(deps): Bump ...` herdava a isenção. Por autor, a
+  #      isenção alcança só quem ela deveria alcançar.
+  #
+  # Merge commit é pulado por FORMA (dois pais): a mensagem dele é gerada pelo
+  # GitHub e não está sob controle de quem abre o PR.
+  #
+  # Nenhuma das duas isenções é barreira de SEGURANÇA — autor de commit se
+  # forja localmente. Elas evitam falso positivo; o que impede mensagem ruim de
+  # propósito é revisão, não este job.
+  # ============================================================================
+  commit-messages:
+    name: commit-messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: commitlint sobre o range, commit por commit
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_ANTES: ${{ github.event.before }}
+          PUSH_ATE: ${{ github.sha }}
+        run: |
+          set -eu
+          ZEROS=0000000000000000000000000000000000000000
+
+          if [ -n "${PR_BASE:-}" ] && [ -n "${PR_HEAD:-}" ]; then
+            DE="$PR_BASE"; ATE="$PR_HEAD"; ORIGEM='pull_request'
+          elif [ -n "${PUSH_ANTES:-}" ] && [ "$PUSH_ANTES" != "$ZEROS" ]; then
+            DE="$PUSH_ANTES"; ATE="$PUSH_ATE"; ORIGEM='push'
+          else
+            # workflow_dispatch, branch nova ou force-push: não há range gravado
+            # no evento, e o que dá para conferir é o commit do topo.
+            DE='HEAD~1'; ATE='HEAD'; ORIGEM='sem range no evento'
+          fi
+          echo "origem: $ORIGEM | range: $DE..$ATE"
+
+          COMMITS=$(git rev-list "$DE..$ATE")
+          if [ -z "$COMMITS" ]; then
+            echo '::error::range vazio — este gate não conferiu mensagem nenhuma'
+            exit 1
+          fi
+
+          CONFERIDOS=0
+          FALHOU=0
+          for SHA in $COMMITS; do
+            if [ "$(git log -1 --format=%P "$SHA" | wc -w)" -gt 1 ]; then
+              echo "-- $SHA: merge commit (mensagem gerada pelo GitHub), pulado"
+              continue
+            fi
+            AUTOR=$(git log -1 --format=%ae "$SHA")
+            case "$AUTOR" in
+              *dependabot*)
+                echo "-- $SHA: autor $AUTOR, pulado por autoria"
+                continue
+                ;;
+            esac
+            echo "-- $SHA ($AUTOR)"
+            CONFERIDOS=$((CONFERIDOS + 1))
+            if ! git log -1 --format=%B "$SHA" | npx --no -- commitlint --verbose; then
+              FALHOU=1
+            fi
+          done
+
+          echo "mensagens conferidas: $CONFERIDOS"
+          exit "$FALHOU"
+  # ============================================================================
+  # deploy-path — o Job de migração do cluster, exercitado como ele roda de fato.
+  #
+  # POR QUE ELE EXISTE, e o que nenhum outro job cobre. O `e2e-testing` prova o
+  # SQL das migrations: as suítes importam as classes e as aplicam num Postgres
+  # de Testcontainers. Isso não passa por NADA da cadeia de deploy — não lê
+  # `.env` pelo dotenv, não usa `src/database/data-source.ts`, não chama
+  # `runMigrations()` e não executa o compilado em `dist/`.
+  #
+  # O chart invoca `node dist/database/migration-runner.js` num Job de pré-sync,
+  # e aquele arquivo é o único consumidor de `dotenv` no repositório. Sem este
+  # job, uma quebra ali só apareceria no cluster.
+  #
+  # O DEFEITO QUE ELE GUARDA está escrito no `data-source.ts`: o glob das
+  # migrations aceita `{.ts,.js}` porque a CLI roda sobre `src/` e o Job roda o
+  # compilado. Glob fixo em `src/*.ts` encontra ZERO migrations no contêiner e o
+  # Job "passa" sem migrar nada — foi capturado na POC de CI/CD. É por isso que
+  # a asserção compara APLICADAS com ARQUIVOS COMPILADOS, em vez de fixar um
+  # número: número fixo envelhece a cada migration nova, e o que importa provar
+  # é que o runner achou todas.
+  # ============================================================================
+  deploy-path:
+    name: deploy-path
+    runs-on: ubuntu-latest
+    needs: [quality-validation]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci_deploy
+          POSTGRES_DB: finance_deploy
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # O runner lê `.env` pelo dotenv, e o `data-source` cai nas vars de
+      # runtime quando as de migração não existem — o fluxo de usuário único.
+      - name: .env como o Job de deploy o recebe
+        run: |
+          {
+            echo NODE_ENV=production
+            echo DB_HOST=localhost
+            echo DB_PORT=5432
+            echo DB_USERNAME=postgres
+            echo DB_PASSWORD=ci_deploy
+            echo DB_NAME=finance_deploy
+            echo DB_SSL=false
+          } > .env
+      # Falha aqui já é o gate: o runner sai diferente de zero se a conferência
+      # de cobertura de RLS reprovar, e é a MESMA função que o gate de schema usa.
+      # Role de runtime como no Aurora (IaC-AWS ADR-008): a migration GrantRuntimeRole
+      # concede DML a ele. Sem os grants, a app tomaria `permission denied` no cluster.
+      - name: role de runtime (finance_app)
+        env:
+          PGPASSWORD: ci_deploy
+        run: psql -h localhost -U postgres -d finance_deploy -c "CREATE ROLE finance_app LOGIN PASSWORD 'ci_app'"
+      - name: migration-runner compilado
+        run: DB_APP_ROLE=finance_app node dist/database/migration-runner.js
+      - name: aplicadas == arquivos compilados
+        env:
+          PGPASSWORD: ci_deploy
+        run: |
+          arquivos=$(ls dist/database/migrations/*.js | wc -l)
+          aplicadas=$(psql -h localhost -U postgres -d finance_deploy -At \
+            -c "SELECT count(*) FROM migrations")
+          echo "arquivos compilados: $arquivos | aplicadas: $aplicadas"
+          test "$arquivos" -gt 0 || { echo "ZERO migrations compiladas — o build não as emitiu"; exit 1; }
+          test "$aplicadas" = "$arquivos" || { echo "o runner não aplicou todas"; exit 1; }
+      # Idempotência: o Job de pré-sync pode reexecutar. A segunda passada tem de
+      # aplicar ZERO e continuar saindo com sucesso.
+      - name: runtime tem DML e não tem DDL
+        env:
+          PGPASSWORD: ci_app
+        run: |
+          set -eu
+          Q() { psql -h localhost -U finance_app -d finance_deploy -v ON_ERROR_STOP=1 -At -c "$1"; }
+          for tabela in $(PGPASSWORD=ci_deploy psql -h localhost -U postgres -d finance_deploy -At \
+              -c "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'migrations'"); do
+            Q "SELECT count(*) FROM \"$tabela\"" >/dev/null || { echo "::error::finance_app sem SELECT em $tabela"; exit 1; }
+          done
+          if Q "CREATE TABLE ddl_proibido (id int)" 2>/dev/null; then
+            echo "::error::finance_app conseguiu DDL"; exit 1
+          fi
+          echo "runtime: SELECT em todas as tabelas, DDL negado"
+      - name: reexecutar aplica zero e passa
+        env:
+          PGPASSWORD: ci_deploy
+        run: |
+          node dist/database/migration-runner.js
+          aplicadas=$(psql -h localhost -U postgres -d finance_deploy -At \
+            -c "SELECT count(*) FROM migrations")
+          arquivos=$(ls dist/database/migrations/*.js | wc -l)
+          test "$aplicadas" = "$arquivos" || { echo "a segunda passada mexeu na contagem"; exit 1; }
 
   build-image:
     name: build-image
@@ -192,6 +395,10 @@ jobs:
         with:
           image-ref: api-finance:ci
           severity: HIGH,CRITICAL
+          # Explícito (é o default do Trivy): bloqueia MESMO CVE sem correção
+          # disponível — o alívio p/ inexploráveis é só o .trivyignore (dono,
+          # justificativa, expiração), nunca ignorar por não ter fix.
+          ignore-unfixed: 'false'
           exit-code: '1'
           trivyignores: .trivyignore
 

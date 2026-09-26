@@ -3,7 +3,7 @@
 # repositório (os 5 jobs) valida cada PR como qualquer outro.
 #
 # Security updates (bump quando sai um advisory) já vêm ligados por padrão nas
-# Settings do repo. Este arquivo governa os VERSION updates DIÁRIOS.
+# Settings do repo. Este arquivo governa os VERSION updates SEMANAIS (segunda-feira).
 #
 # Princípio anti-ruído (ver README §CI/CD): o Dependabot separa cada dependência
 # em um PR. Para pacotes que SÓ funcionam se subirem juntos (o eslint e seu
@@ -17,7 +17,7 @@ updates:
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
-      interval: 'daily'
+      interval: 'weekly'
     open-pull-requests-limit: 10
     commit-message:
       # Prefixos distintos por natureza da dependência (Conventional Commits):
@@ -37,11 +37,26 @@ updates:
       # typescript-eslint publicar suporte ao TS 7.
       - dependency-name: 'typescript'
         update-types: ['version-update:semver-major']
+      # MAJOR do NestJS é upgrade de FRAMEWORK, não de dependência: o ecossistema
+      # @nestjs/* é acoplado por peer deps e versionado como conjunto (no Nest 12
+      # até o config, antes em 4.x, saltou para 12.x). Um PR por pacote quebra os
+      # peers e NUNCA é mergeável isoladamente — a onda de 10 PRs individuais
+      # (11→12, #26–#35) provou ao vivo: npm ci morre em ERESOLVE em segundos.
+      # O upgrade de major é decisão humana: branch dedicada (chore/nestjs-N),
+      # bump SIMULTÂNEO de todos os @nestjs/* + migration guide oficial + suíte
+      # e2e completa. Minor/patch seguem fluindo agrupados (grupo `nestjs`).
+      - dependency-name: '@nestjs/*'
+        update-types: ['version-update:semver-major']
     groups:
       # ── Toolchains coesos: pacotes que precisam subir JUNTOS ────────────────
       # (grupos SEM update-types capturam major+minor+patch). Um dependency cai
       # no PRIMEIRO grupo cuja lista casa — por isso os específicos vêm antes do
       # catch-all minor-and-patch.
+      # O framework sobe JUNTO ou não sobe: minors/patches do ecossistema Nest
+      # num único PR coordenado (majors estão em `ignore` acima — decisão humana).
+      nestjs:
+        patterns:
+          - '@nestjs/*'
       eslint:
         patterns:
           - 'eslint'

@@ -1,6 +1,7 @@
 # Build
 dist/
 coverage/
+coverage-e2e/
 
 # Dependências
 node_modules/
