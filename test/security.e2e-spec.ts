@@ -121,7 +121,7 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
           algorithm: 'RS256',
           subject: 'atacante',
           issuer: 'sayplus',
-          audience: ['sayplus', 'petshop'],
+          audience: ['sayplus', 'finance'],
           expiresIn: 300,
         },
       );
@@ -140,7 +140,7 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
           algorithm: 'HS256',
           subject: 'atacante',
           issuer: 'sayplus',
-          audience: ['sayplus', 'petshop'],
+          audience: ['sayplus', 'finance'],
           expiresIn: 300,
         },
       );
@@ -157,7 +157,7 @@ describe('Segurança — matriz de validação do JWT (e2e)', () => {
           algorithm: 'none',
           subject: 'atacante',
           issuer: 'sayplus',
-          audience: ['sayplus', 'petshop'],
+          audience: ['sayplus', 'finance'],
         },
       );
       const res = await bearer(forged);

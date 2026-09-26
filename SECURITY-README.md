@@ -82,7 +82,7 @@ O módulo lê estes campos (`src/auth/jwt-payload.interface.ts`) e **nada mais**
 | `tenantId` | `"tenant-a"` | Herdado do contrato do archetype; o Finance não usa como filtro de RLS — marca vem de `GET /auth/me` |
 | `permissions[]` | `["finance.reconciliation.read", ...]` | Confrontado com o `@Permissions` de cada rota |
 | `iss` | `"sayplus"` | Conferido: emissor esperado |
-| `aud` | `["sayplus", "petshop"]` | Conferido: o módulo pertence ao catálogo `petshop` |
+| `aud` | `["sayplus", "finance"]` | Conferido: o módulo pertence ao catálogo `finance` |
 | `exp` | *(timestamp)* | Conferido: token expirado → 401 |
 | *(header)* `alg` | `"RS256"` | **Fixo** — qualquer outro algoritmo é recusado |
 
@@ -94,7 +94,7 @@ O módulo lê estes campos (`src/auth/jwt-payload.interface.ts`) e **nada mais**
   "tenantId": "tenant-a",
   "permissions": ["finance.reconciliation.read", "finance.reconciliation.run"],
   "iss": "sayplus",
-  "aud": ["sayplus", "petshop"],
+  "aud": ["sayplus", "finance"],
   "iat": 1735000000,
   "exp": 1735003600
 }

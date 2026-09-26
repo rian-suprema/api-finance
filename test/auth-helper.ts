@@ -46,7 +46,7 @@ export function setupTestAuth(): TestAuthContext {
   writeFileSync(publicKeyPath, publicKey);
   process.env.JWT_PUBLIC_KEY_PATH = publicKeyPath;
   process.env.JWT_ISSUER = 'sayplus';
-  process.env.JWT_AUDIENCE = 'petshop';
+  process.env.JWT_AUDIENCE = 'finance';
 
   const sign = (options: SignTokenOptions = {}): string =>
     jwt.sign(
@@ -61,7 +61,7 @@ export function setupTestAuth(): TestAuthContext {
         subject: options.sub ?? 'user-test-1',
         issuer: options.issuer ?? 'sayplus',
         // Contrato SayPlus: aud é array e inclui o code do módulo no catálogo
-        audience: options.audience ?? ['sayplus', 'petshop'],
+        audience: options.audience ?? ['sayplus', 'finance'],
         expiresIn: options.expiresIn ?? 300,
       },
     );

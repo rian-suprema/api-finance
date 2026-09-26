@@ -59,7 +59,7 @@ export function signOrganicToken(options: OrganicSignOptions = {}): string {
       algorithm: 'RS256',
       subject: options.sub ?? 'marina-organic',
       issuer: 'sayplus',
-      audience: ['sayplus', 'petshop'],
+      audience: ['sayplus', 'finance'],
       expiresIn: '2h',
     },
   );

@@ -29,7 +29,7 @@ export const envValidationSchema = Joi.object({
   // nunca boot derrubado (defeito real pego na demo do Step 1).
   JWT_PUBLIC_KEY_PATH: Joi.string().allow('').optional(),
   JWT_ISSUER: Joi.string().default('sayplus'),
-  JWT_AUDIENCE: Joi.string().default('petshop'),
+  JWT_AUDIENCE: Joi.string().default('finance'),
 
   // RDS Aurora PostgreSQL
   DB_HOST: Joi.string().required(),

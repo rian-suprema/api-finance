@@ -46,6 +46,42 @@ jobs:
       - run: npm run test:cov
       - run: npm run build
 
+  supply-chain:
+    name: supply-chain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # Gate 1 — inventário de scripts de install confere com a allowlist versionada.
+      # A allowlist NÃO autoriza execução (nada roda com --ignore-scripts): é lista
+      # de REVISÃO. Reprova nos dois sentidos: pacote novo fora da lista (+), entrada
+      # órfã na lista (-). Regenerar SEMPRE na plataforma do runner (glibc/x64) —
+      # instrução no cabeçalho de .github/install-scripts-allowlist.txt.
+      - name: Gate — scripts de install conferem com a allowlist
+        run: |
+          npm query ':attr(scripts,[install]),:attr(scripts,[preinstall]),:attr(scripts,[postinstall])' \
+            | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const s=new Set(JSON.parse(d).map(p=>p.name));console.log([...s].sort().join("\n"))})' \
+            | LC_ALL=C sort > /tmp/atual.txt
+          grep -vE '^[[:space:]]*(#|$)' .github/install-scripts-allowlist.txt | LC_ALL=C sort > /tmp/esperado.txt
+          if ! diff -u /tmp/esperado.txt /tmp/atual.txt; then
+            echo "::error::A arvore instalada divergiu de .github/install-scripts-allowlist.txt."
+            echo "Linhas '-' = na allowlist e ausentes na arvore (remova a entrada)."
+            echo "Linhas '+' = na arvore e fora da allowlist — REVISE O SCRIPT antes de somar a entrada."
+            echo "Regenerar (na plataforma do runner): ver o cabecalho do arquivo."
+            exit 1
+          fi
+          echo "OK — $(wc -l < /tmp/atual.txt) pacotes com script de install, todos previstos e todos bloqueados."
+      # Gate 2 — assinatura/proveniência do registry: prova que cada tarball é o que
+      # o registry ASSINOU (detecta adulteração em registry/mirror). NÃO atesta que o
+      # pacote seja confiável — um malicioso publicado legitimamente passa.
+      - name: Gate — assinaturas e proveniência do registry
+        run: npm audit signatures
+
+
   security:
     name: security
     runs-on: ubuntu-latest
@@ -170,11 +206,40 @@ jobs:
     runs-on: ubuntu-latest # independente: valida o chart, não a aplicação
     steps:
       - uses: actions/checkout@v5
+      # CIDR fictício exercita a regra de saída para o Postgres, que só renderiza com
+      # cidrs preenchidos. JWT_AUDIENCE do finance já vem no chart (`finance`).
       - name: Lint do chart
         run: helm lint deploy/helm/api-finance
-      - name: Renderiza os manifests
-        run: helm template api-finance deploy/helm/api-finance > rendered.yaml
+      # Matriz: default + os values de ambiente. Só com values-{dev,prod} as
+      # NetworkPolicies são renderizadas — sem a matriz nunca passariam pelo gate.
+      - name: Renderiza os manifests (default, dev, prod)
+        run: |
+          set -euo pipefail
+          C=deploy/helm/api-finance
+          PG=(--set 'networkPolicy.egress.postgres.cidrs={10.0.0.0/24}')
+          helm template api-finance "$C" "${PG[@]}" > rendered-default.yaml
+          helm template api-finance "$C" -f "$C/values-dev.yaml" "${PG[@]}" > rendered-dev.yaml
+          helm template api-finance "$C" -f "$C/values-prod.yaml" "${PG[@]}" > rendered-prod.yaml
+          # Blocos opcionais ligados (redis, podIdentity, extra = ClickHouse fictício).
+          helm template api-finance "$C" -f "$C/values-dev.yaml" "${PG[@]}" \
+            --set 'networkPolicy.egress.redis.cidrs={10.0.1.0/24}' \
+            --set networkPolicy.egress.podIdentity.enabled=true \
+            --set 'networkPolicy.egress.extra[0].to[0].ipBlock.cidr=10.20.0.0/24' \
+            --set 'networkPolicy.egress.extra[0].ports[0].port=8443' > rendered-egress-full.yaml
+          for f in rendered-dev.yaml rendered-prod.yaml; do
+            # app + jobs (migrations) + cronjobs (Trio/ClickHouse)
+            [ "$(grep -c '^kind: NetworkPolicy' "$f")" = 3 ] || { echo "::error::$f sem as 3 NetworkPolicies"; exit 1; }
+            grep -q '^kind: PodDisruptionBudget' "$f" || { echo "::error::$f sem PodDisruptionBudget"; exit 1; }
+            grep -q 'JWT_AUDIENCE: "finance"' "$f" || { echo "::error::$f com JWT_AUDIENCE diferente de finance"; exit 1; }
+            [ "$(grep -c 'app.kubernetes.io/component: cronjob' "$f")" -ge 3 ] || { echo "::error::$f: CronJobs fora da policy de saída deles"; exit 1; }
+          done
+      # Fail-closed provado: sem o audience do módulo o chart NÃO pode renderizar.
+      - name: Sem JWT_AUDIENCE o chart é recusado
+        run: |
+          if helm template api-finance deploy/helm/api-finance --set config.JWT_AUDIENCE= >/dev/null 2>&1; then
+            echo "::error::o chart renderizou sem config.JWT_AUDIENCE"; exit 1
+          fi
       - name: Valida manifests contra o schema do K8s
         uses: docker://ghcr.io/yannh/kubeconform:latest
         with:
-          args: -strict -summary rendered.yaml
+          args: -strict -summary rendered-default.yaml rendered-dev.yaml rendered-prod.yaml rendered-egress-full.yaml

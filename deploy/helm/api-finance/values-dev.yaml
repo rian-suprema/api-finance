@@ -6,13 +6,28 @@
 #   [CI]               → preenchido pela fase de publicação do CI
 # Segredos NUNCA entram aqui: chegam via Secret externo (existingSecret).
 # ==============================================================================
-replicaCount: 1
+# 2 réplicas também em dev: com PDB minAvailable 1 e spread por zona, é o mínimo que
+# sobrevive a drain de node e à perda de uma AZ (1 réplica + PDB travaria o drain).
+replicaCount: 2
 
 image:
   repository: '' # [SRE] registry a definir (agnóstico) — ex.: <registry>/api-finance
   tag: '' # [CI] SHA do commit na publicação — nunca "latest"
 
 config:
+  # SayPlus API (GET /auth/me) pelo DNS interno — nunca pelo hostname público.
+  SAYPLUS_API_URL: '' # [SRE] ex.: http://sayplus-api.sayplus.svc.cluster.local:3000
+  # ClickHouse do DW (credencial de leitura em CLICKHOUSE_PASSWORD, no existingSecret)
+  CLICKHOUSE_URL: '' # [SRE]
+  CLICKHOUSE_USER: '' # [SRE]
+  CLICKHOUSE_DATABASE: dw_bet
+  # API bancária da Trio (TRIO_CLIENT_ID/TRIO_CLIENT_SECRET no existingSecret)
+  TRIO_BASE_URL: '' # [SRE]
+  # 1 (reais) ou 100 (centavos): NUNCA adivinhar — confirmar na doc da Trio (PARADA HUMANA).
+  TRIO_AMOUNT_DIVISOR: '' # [TIME FINANCE]
+  TRIO_ACCOUNT_ID_SUPREMA: '' # [SRE]
+  TRIO_ACCOUNT_ID_ULTRA: '' # [SRE]
+  TRIO_ACCOUNT_ID_MAXIMA: '' # [SRE]
   DB_HOST: '' # [TERRAFORM OUTPUT] endpoint do Aurora (writer)
   DB_USERNAME: '' # [TERRAFORM OUTPUT]
   DB_NAME: '' # [TERRAFORM OUTPUT]
@@ -40,6 +55,6 @@ jwtPublicKey:
 # (nem o gateway alcança o pod). Pré-requisito: CNI que imponha NetworkPolicy.
 networkPolicy:
   enabled: true
-  ingress:
-    gatewayNamespace: '' # [SRE] namespace do ingress-controller/gateway
-    gatewayPodLabels: {} # [SRE] labels dos pods do gateway (opcional)
+  egress:
+    postgres:
+      cidrs: [] # [TERRAFORM OUTPUT] CIDRs das subnets de dados (Aurora)

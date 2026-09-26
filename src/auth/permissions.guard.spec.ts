@@ -31,25 +31,27 @@ describe('PermissionsGuard (deny-by-default)', () => {
 
   it('rota SEM @Permissions e SEM @Public → 403 (deny-by-default)', () => {
     const guard = guardFor(undefined, undefined);
-    expect(() => guard.canActivate(contextFor({ permissions: ['petshop.users.read'] }))).toThrow(
-      ForbiddenException,
-    );
+    expect(() =>
+      guard.canActivate(contextFor({ permissions: ['finance.reconciliation.read'] })),
+    ).toThrow(ForbiddenException);
   });
 
   it('token sem o code exigido → 403 apontando o que falta', () => {
-    const guard = guardFor(undefined, ['petshop.users.delete']);
-    expect(() => guard.canActivate(contextFor({ permissions: ['petshop.users.read'] }))).toThrow(
-      /petshop\.users\.delete/,
-    );
+    const guard = guardFor(undefined, ['finance.reconciliation.resolve']);
+    expect(() =>
+      guard.canActivate(contextFor({ permissions: ['finance.reconciliation.read'] })),
+    ).toThrow(/finance\.reconciliation\.resolve/);
   });
 
   it('token com o code exigido passa', () => {
-    const guard = guardFor(undefined, ['petshop.users.read']);
-    expect(guard.canActivate(contextFor({ permissions: ['petshop.users.read'] }))).toBe(true);
+    const guard = guardFor(undefined, ['finance.reconciliation.read']);
+    expect(guard.canActivate(contextFor({ permissions: ['finance.reconciliation.read'] }))).toBe(
+      true,
+    );
   });
 
   it('request sem user (defensivo) → 403, nunca aberto', () => {
-    const guard = guardFor(undefined, ['petshop.users.read']);
+    const guard = guardFor(undefined, ['finance.reconciliation.read']);
     expect(() => guard.canActivate(contextFor())).toThrow(ForbiddenException);
   });
 });

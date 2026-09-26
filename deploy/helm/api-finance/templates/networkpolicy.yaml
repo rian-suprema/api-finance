@@ -1,8 +1,9 @@
 {{- if .Values.networkPolicy.enabled }}
-# Leste/Oeste fail-closed: com a policy habilitada, NENHUM pod alcança este
-# serviço a não ser o que o allow abaixo declarar. Sem gatewayNamespace
-# preenchido, o efeito é deny-all — intencional: a abertura é decisão
-# explícita do SRE, nunca um default do chart.
+# Leste/Oeste fail-closed nos dois sentidos:
+# - ENTRADA: só a SayPlus API (proxy + token exchange). Sem gatewayNamespace o
+#   efeito é deny-all — a abertura é decisão explícita, nunca um default vazio.
+# - SAÍDA: só DNS, Postgres e as regras `egress.extra` do módulo. Nada de
+#   internet, nada de outro módulo, nada de hairpin pela borda.
 # Nota: probes (kubelet → pod) chegam do nó e, nos CNIs usuais, não são
 # afetadas por policy de podSelector.
 apiVersion: networking.k8s.io/v1
@@ -17,6 +18,9 @@ spec:
       {{- include "api-finance.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
+    {{- if .Values.networkPolicy.egress.enabled }}
+    - Egress
+    {{- end }}
   {{- if .Values.networkPolicy.ingress.gatewayNamespace }}
   ingress:
     - from:
@@ -31,5 +35,85 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.service.targetPort }}
+  {{- end }}
+  {{- with .Values.networkPolicy.egress }}
+  {{- if .enabled }}
+  egress:
+    {{- if .dns }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+    {{- if .postgres.cidrs }}
+    - to:
+        {{- range .postgres.cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .postgres.port }}
+    {{- end }}
+    {{- if .redis.cidrs }}
+    - to:
+        {{- range .redis.cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .redis.port }}
+    {{- end }}
+    {{- if .https.enabled }}
+    # HTTPS para fora da VPC (APIs da AWS, terceiros) — nunca para faixas privadas:
+    # outro serviço do cluster/VPC não é alcançado por esta regra.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- if .podIdentity.enabled }}
+    # Credenciais AWS do pod (EKS Pod Identity): agente local do node em 169.254.170.23:80.
+    # Necessário para quem usa o SDK da AWS (ex.: SNS/SQS); a regra https exclui 169.254/16.
+    - to:
+        - ipBlock:
+            cidr: 169.254.170.23/32
+      ports:
+        - protocol: TCP
+          port: 80
+    {{- end }}
+    {{- if .sayplusApi.enabled }}
+    # Módulo que consome a SayPlus API (ex.: GET /auth/me) — só ela, só a porta da API.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Values.networkPolicy.ingress.gatewayNamespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $.Values.networkPolicy.ingress.gatewayPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .sayplusApi.port }}
+    {{- end }}
+    {{- with .extra }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
   {{- end }}
 {{- end }}

@@ -13,12 +13,32 @@ spec:
     metadata:
       labels:
         {{- include "api-finance.selectorLabels" . | nindent 8 }}
+        {{- if .Values.sayplusModule }}
+        # Contrato com a NetworkPolicy da SayPlus (junto com o label do namespace).
+        sayplus.io/module: 'true'
+        {{- end }}
       annotations:
         # Rollout automático quando a config muda — sem isso, editar o
         # ConfigMap não reinicia os pods e a mudança nunca chega à app.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.topologySpread.enabled }}
+      # Uma réplica por zona (e por node) sempre que possível.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "api-finance.selectorLabels" . | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "api-finance.selectorLabels" . | nindent 14 }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

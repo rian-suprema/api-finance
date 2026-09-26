@@ -16,7 +16,7 @@ export interface JwtPayload {
   tenantId: string;
   /**
    * Codes de permissão concedidos (strings opacas para o módulo, ex.:
-   * `petshop.users.read`). A concessão vive no catálogo da SayPlus.
+   * `finance.reconciliation.read`). A concessão vive no catálogo da SayPlus.
    */
   permissions: string[];
 }

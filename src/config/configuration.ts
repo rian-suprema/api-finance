@@ -19,7 +19,7 @@ export const authConfig = registerAs('auth', () => ({
   // vazio → app sobe, probes ok, rotas protegidas 401 (fail-closed + alarme)
   publicKeyPath: process.env.JWT_PUBLIC_KEY_PATH || undefined,
   issuer: process.env.JWT_ISSUER ?? 'sayplus',
-  audience: process.env.JWT_AUDIENCE ?? 'petshop',
+  audience: process.env.JWT_AUDIENCE ?? 'finance',
 }));
 
 export const databaseConfig = registerAs('database', () => ({

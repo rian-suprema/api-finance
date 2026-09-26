@@ -16,8 +16,25 @@ image:
 
 service:
   type: ClusterIP
-  port: 80
+  # Porta do Service IGUAL à do container: a NetworkPolicy do VPC CNI (EKS) só é
+  # aplicada corretamente assim. A SayPlus chama http://<svc>.<ns>.svc.cluster.local:3005.
+  port: 3005
   targetPort: 3005
+
+# Identidade de módulo SayPlus: o label `sayplus.io/module: "true"` vai nos pods (o
+# namespace recebe o mesmo label pelo GitOps da plataforma). A NetworkPolicy da SayPlus
+# só troca tráfego com pods que tenham os dois.
+sayplusModule: true
+
+# Disponibilidade durante drain/upgrade de node: com 2+ réplicas, ao menos 1 fica de pé.
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Réplicas em zonas (e nodes) diferentes: a perda de uma AZ não derruba o módulo.
+topologySpread:
+  enabled: true
+  whenUnsatisfiable: ScheduleAnyway
 
 # Sem requests/limits não há scheduling decente nem HPA — obrigatório.
 resources:
@@ -53,7 +70,9 @@ config:
   # A chave pública será montada via Secret+volume neste caminho (Step 3 da
   # integração); sem ela o app sobe fail-closed: probes ok, rotas 401.
   JWT_ISSUER: sayplus
-  JWT_AUDIENCE: petshop
+  # Code do módulo no catálogo da SayPlus (a SayPlus cunha aud=[sayplus, finance]).
+  # Vinha `petshop` (sobra do archetype): toda chamada seria recusada com 401.
+  JWT_AUDIENCE: finance
   JWT_PUBLIC_KEY_PATH: /etc/sayplus/jwt/public.pem
   DB_PORT: '5432'
   DB_SSL: 'true'
@@ -114,24 +133,38 @@ cronjobs:
       requests: { cpu: 100m, memory: 384Mi }
       limits: { cpu: 500m, memory: 1Gi }
 
-# Tráfego Leste/Oeste: default-deny de ingress + allow explícito só para o
-# caminho do gateway. Postura do archetype: NASCE HABILITADA nos ambientes
-# (values-{dev,prod}) — nenhum outro pod abre conexão com este por padrão.
+# Tráfego Leste/Oeste: default-deny de ingress E de egress + allow explícito.
+# NASCE HABILITADA nos ambientes (values-{dev,prod}).
 # PRÉ-REQUISITO (ver requirements.yaml): o CNI do cluster precisa IMPOR
-# NetworkPolicy (EKS: VPC CNI c/ network policy habilitado, Calico ou Cilium)
-# — sem isso a política fica silenciosamente inerte.
-# Egress default-deny é evolução futura (exige liberar DNS/Aurora/Redis/AWS
-# endpoint a endpoint — decisão a tomar com a operação madura).
+# NetworkPolicy (EKS: VPC CNI c/ network policy habilitado, Calico ou Cilium).
 networkPolicy:
   enabled: false
   ingress:
-    # [SRE] namespace do ingress-controller/gateway. OBRIGATÓRIO antes do
-    # 1º deploy com a policy habilitada: vazio = deny-all TOTAL (nem o
-    # gateway alcança o pod).
-    gatewayNamespace: ''
-    # [SRE] labels (matchLabels) dos pods do gateway; vazio = qualquer pod
-    # DO NAMESPACE do gateway
-    gatewayPodLabels: {}
+    # Quem chama o módulo é a SayPlus API (proxy + token exchange).
+    gatewayNamespace: sayplus
+    gatewayPodLabels:
+      app.kubernetes.io/name: sayplus-api
+  egress:
+    enabled: true
+    dns: true
+    postgres:
+      port: 5432
+      cidrs: [] # [TERRAFORM OUTPUT] CIDRs das subnets de dados (Aurora)
+    redis:
+      port: 6379
+      cidrs: []
+    # API bancária da Trio (terceiro, HTTPS 443). Nunca faixas privadas.
+    https:
+      enabled: true
+    podIdentity:
+      enabled: false
+    # GET /auth/me da SayPlus (resolve as marcas do usuário) — dependência crítica.
+    sayplusApi:
+      enabled: true
+      port: 3000
+    # ClickHouse do data warehouse: [SRE] CIDR/porta do DW (ex.: 8443 HTTPS). Até lá,
+    # o finance DEGRADA as telas que dependem dele (não entra no readiness).
+    extra: []
 
 podSecurityContext:
   runAsNonRoot: true

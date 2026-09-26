@@ -40,7 +40,7 @@ const token = jwt.sign(
     algorithm: 'RS256',
     subject: 'dev-user',
     issuer: 'sayplus',
-    audience: ['sayplus', 'petshop'],
+    audience: ['sayplus', 'finance'],
     expiresIn: '8h',
   },
 );

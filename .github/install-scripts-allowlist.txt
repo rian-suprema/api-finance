@@ -1,0 +1,46 @@
+# ==============================================================================
+# Inventario de pacotes com SCRIPT DE INSTALL (preinstall/install/postinstall)
+# na arvore instalada. NAO e lista de scripts autorizados a rodar — com
+# `npm ci --ignore-scripts` (usado no CI e no Dockerfile) NENHUM deles executa.
+# E um INVENTARIO DE REVISAO: o job `supply-chain` reprova quando a arvore
+# diverge desta lista (nos dois sentidos), tornando a entrada de um pacote com
+# script um evento VISIVEL e revisado — nao uma descoberta acidental.
+#
+# QUANDO O GATE REPROVAR:
+#   '+pkg' (na arvore, fora da lista): REVISE o que o script do pkg faz. Se for
+#     aceitavel, some a linha NESTE arquivo, no MESMO PR que trouxe a dependencia,
+#     com justificativa e dono — ou recuse o PR.
+#   '-pkg' (na lista, ausente da arvore): a dependencia saiu; remova a linha.
+#
+# SE UM SCRIPT PRECISAR DE FATO EXECUTAR: nao e aqui. Exige linha explicita
+#   `npm rebuild <pkg>` no job/Dockerfile, revisada a parte, preferindo binario
+#   no proprio tarball (node-gyp-build/prebuildify) ou optionalDependencies —
+#   ambos cobertos pelo `integrity` do lockfile. Baixar binario em postinstall
+#   escapa do integrity.
+#
+# POR PROJETO E POR PLATAFORMA: este arquivo e a LINHA DE BASE do archetype. Um
+#   servico gerado tem outra arvore -> REGENERE no 1o PR. optionalDependencies
+#   variam por SO/libc/arch: gere SEMPRE na plataforma do runner (glibc/x64,
+#   ubuntu-latest); dentro do container node:22.23.2 e equivalente.
+#
+# REGENERAR (na plataforma do runner):
+#   npm ci --ignore-scripts
+#   npm query ':attr(scripts,[install]),:attr(scripts,[preinstall]),:attr(scripts,[postinstall])' \
+#     | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const s=new Set(JSON.parse(d).map(p=>p.name));console.log([...s].sort().join("\n"))})' \
+#     | LC_ALL=C sort
+#
+# Cada pacote abaixo e TRANSITIVO e esta BLOQUEADO por --ignore-scripts; o
+# archetype nao depende do script (fallback JS ou nao exercitado no runtime):
+#   @parcel/watcher  file-watcher nativo (watch do Nest/jest); postinstall compila/baixa o binding
+#   @scarf/scarf     telemetria de instalacao (analytics); postinstall "phone home"
+#   cpu-features     deteccao de CPU nativa (opcional do ssh2); install compila
+#   protobufjs       gera artefatos no postinstall (via otel/grpc); runtime usa o JS publicado
+#   ssh2             cliente SSH (via dockerode/Testcontainers); funciona em JS puro
+#   unrs-resolver    resolver nativo (eslint import resolver); cai em fallback JS se faltar o binario
+# ==============================================================================
+@parcel/watcher
+@scarf/scarf
+cpu-features
+protobufjs
+ssh2
+unrs-resolver

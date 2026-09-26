@@ -25,3 +25,13 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/name: {{ include "api-finance.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Labels dos pods dos Jobs (migrations, seed). Diferentes do selectorLabels de propósito:
+o Service, o PDB e o spread do Deployment NÃO podem selecionar pods de Job (o Service
+mandaria tráfego para um pod que não serve a API durante o sync).
+*/}}
+{{- define "api-finance.jobSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "api-finance.name" . }}-job
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

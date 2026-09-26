@@ -58,9 +58,29 @@ requires:
       PRÉ-REQUISITO de cluster: o CNI precisa IMPOR NetworkPolicy (EKS: VPC
       CNI com network policy habilitado, Calico ou Cilium) — sem imposição, a
       policy do chart fica silenciosamente inerte. O chart nasce com
-      default-deny de ingress habilitado nos values de ambiente; o SRE DEVE
-      preencher networkPolicy.ingress.gatewayNamespace antes do 1º deploy
-      (vazio = deny-all total, nem o gateway alcança o pod).
+      default-deny de ingress E de egress nos values de ambiente. Entrada:
+      só a SayPlus API (namespace `sayplus`, pods app.kubernetes.io/name=sayplus-api).
+      Saída da API: CoreDNS, Postgres (networkPolicy.egress.postgres.cidrs =
+      subnets de dados [TERRAFORM OUTPUT]), HTTPS 443 para fora da VPC (Trio),
+      SayPlus API na 3000 (GET /auth/me) e egress.extra (ClickHouse — [SRE]
+      CIDR/porta do DW; se o endpoint for público em 443, a regra HTTPS cobre).
+      Jobs (migrations): só DNS + Postgres. CronJobs (trio-capture,
+      reconciliation): + HTTPS e egress.extra, por policy própria.
+      EKS/VPC CNI: a porta do Service é igual à do container (3005).
+
+  - type: k8s-namespace-label
+    purpose: >-
+      O namespace do módulo leva o label `sayplus.io/module: "true"` (o chart
+      coloca o mesmo label nos pods). É o contrato com a NetworkPolicy da
+      SayPlus: só pods com os dois labels trocam tráfego com ela (inclusive o
+      GET /auth/me do finance). Aplicado pela plataforma no GitOps
+      (Application do Argo CD), não pelo chart.
+
+  - type: module-audience
+    purpose: >-
+      config.JWT_AUDIENCE = code do módulo no catálogo da SayPlus (`finance`).
+      Obrigatório: sem ele o chart não renderiza (a SayPlus cunha
+      aud=[sayplus, finance]; audience divergente = 401 em toda chamada).
 
   # --- Finance (Fase 17) — 3 dependências externas novas ---------------------
   # Ver docs/migracao-finance/INFRA-FINANCE.md §10 para o racional completo.

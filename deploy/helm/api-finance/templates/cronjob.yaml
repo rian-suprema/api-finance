@@ -31,7 +31,8 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "api-finance.selectorLabels" . | nindent 12 }}
+            {{- include "api-finance.jobSelectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: cronjob
         spec:
           restartPolicy: OnFailure
           securityContext:
@@ -86,7 +87,8 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "api-finance.selectorLabels" . | nindent 12 }}
+            {{- include "api-finance.jobSelectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: cronjob
         spec:
           restartPolicy: OnFailure
           # A conciliação demora minutos (bisseção do extrato por marca) — um

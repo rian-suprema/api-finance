@@ -21,7 +21,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "api-finance.selectorLabels" . | nindent 8 }}
+        {{- include "api-finance.jobSelectorLabels" . | nindent 8 }}
     spec:
       restartPolicy: Never
       securityContext:

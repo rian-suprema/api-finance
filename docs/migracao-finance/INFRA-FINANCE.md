@@ -220,9 +220,11 @@ perde a resiliência real e se perde a possibilidade de subir mal configurado.
 
 ### 5.1 · Ingress
 
-Nada muda em relação ao archetype: `NetworkPolicy` com ingress default-deny + allow explícito para o
-namespace do gateway (`networkPolicy.ingress.gatewayNamespace`, obrigatório antes do primeiro deploy —
-vazio significa deny-all total). O módulo não expõe porta nova nem protocolo novo.
+Nada muda em relação ao archetype: `NetworkPolicy` com ingress default-deny + allow explícito só para a
+SayPlus API (`gatewayNamespace: sayplus` + pods `app.kubernetes.io/name: sayplus-api`), na porta 3005
+— a porta do Service é igual à do container, exigência da NetworkPolicy do VPC CNI no EKS. Os pods
+levam o label `sayplus.io/module: "true"` (o namespace recebe o mesmo label pelo GitOps da
+plataforma). O módulo não expõe porta nova nem protocolo novo.
 
 ### 5.2 · Egress — a novidade real
 
@@ -238,9 +240,20 @@ destinos**:
 | DNS | UDP/TCP 53 | egress | contínuo | crítica |
 | Coletor OTLP (se habilitado) | 4317/4318 | egress | contínuo | baixa |
 
-O chart do archetype registra que **egress default-deny é evolução futura**. Se e quando entrar, esta
-tabela é a lista de allow. Antes disso, o item de ação concreto é declarar os destinos em
-`deploy/infra/requirements.yaml` para o SRE saber que existem (§10).
+**Implementado no chart** (egress default-deny nos values de ambiente), bloco `networkPolicy.egress`:
+
+| Destino | Onde no chart | Quem usa |
+|---|---|---|
+| DNS | `dns: true` | API, Jobs, CronJobs |
+| Aurora | `postgres.cidrs` — [TERRAFORM OUTPUT] | API, Jobs, CronJobs |
+| Trio | `https.enabled: true` (443 fora de faixas privadas) | API, CronJobs |
+| SayPlus `/auth/me` | `sayplusApi.enabled: true` (porta 3000, só os pods da SayPlus) | API |
+| ClickHouse | `extra` — **[SRE]** CIDR/porta do DW; endpoint público em 443 já é coberto por `https` | API, CronJobs |
+| Coletor OTLP | `extra`, se habilitado | API |
+
+O Job de migrations fica só com DNS + Aurora. Os CronJobs (`app.kubernetes.io/component: cronjob`)
+recebem HTTPS e `extra` por uma policy aditiva (`networkpolicy-cronjobs.yaml`). Os pods de Job e
+CronJob não são selecionados pelo Service nem pelo PDB (`jobSelectorLabels`).
 
 **Ponto de atenção sobre o pico de egress da conciliação:** a varredura por bisseção do extrato pode
 gastar até ~1.000 requisições HTTPS por marca em um dia movimentado, 3 marcas em paralelo, em uma

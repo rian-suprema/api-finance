@@ -1,0 +1,15 @@
+{{- if and .Values.pdb.enabled (gt (int .Values.replicaCount) 1) }}
+# Drain de node / upgrade do cluster nunca derruba todas as réplicas de uma vez.
+# Só existe com 2+ réplicas: com 1, minAvailable 1 travaria qualquer drain.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "api-finance.fullname" . }}
+  labels:
+    {{- include "api-finance.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "api-finance.selectorLabels" . | nindent 6 }}
+{{- end }}

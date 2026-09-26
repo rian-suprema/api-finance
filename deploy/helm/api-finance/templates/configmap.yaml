@@ -1,5 +1,8 @@
 # Config NÃO-sensível da aplicação (envFrom no Deployment).
 # Sensível vem de Secret externo (values.existingSecret) — nunca daqui.
+# JWT_AUDIENCE obrigatório: é o `code` do módulo no catálogo da SayPlus. Errado ou
+# ausente, a SayPlus e o módulo discordam do `aud` e toda chamada vira 401.
+{{- $_ := required "config.JWT_AUDIENCE é obrigatório: use o code do módulo no catálogo da SayPlus (a SayPlus cunha aud=[sayplus, <code>])" .Values.config.JWT_AUDIENCE }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
